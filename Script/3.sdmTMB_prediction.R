@@ -98,6 +98,8 @@ cat("Mesh : N nœuds =", mesh_pos$mesh$n, "\n\n")
 # Visualisation mesh
 
 loc  <- mesh_pos$mesh$loc[, 1:2]
+loc_df <- data.frame(loc)
+names(loc_df) <- c("X", "Y")
 idx  <- mesh_pos$mesh$graph$tv[, 1:3]
 segs <- lapply(seq_len(nrow(idx)), function(i) {
   pts <- loc[idx[i, ], ]
@@ -107,14 +109,19 @@ mesh_lines <- st_sf(
   geometry = st_sfc(segs),
   crs = st_crs(Study_domain_Hole)  # utiliser le CRS de ton domaine
 )
-
+mesh_nodes <- st_as_sf(
+  loc_df,
+  coords = c("X", "Y"),
+  crs = st_crs(Study_domain_Hole)
+)
 
 
 # Créer le plot
 mesh_plot <- ggplot() +
   geom_sf(data = mesh_lines, color = "grey55", linewidth = 0.2) +
-  geom_point(data = dat_pos, aes(x = X, y = Y),
-             color = "orange", size = 1.2) +
+  geom_sf(data = mesh_nodes, aes(color = "Nodes"), size = 1) +  #Si on veut des points sur les noeuds
+  # geom_point(data = dat_pos, aes(x = X, y = Y),  #Si on veut afficher les stations
+  #            color = "orange", size = 1.2) +
   geom_sf(data = Study_domain_Hole, fill = "grey80", color = "black") +
   coord_sf(
     xlim = range(dat_pos$X) + c(-30, 30),
@@ -122,8 +129,7 @@ mesh_plot <- ggplot() +
   ) +
   labs(
     title = paste0("Mesh"),
-    subtitle = paste0("N nœuds = ", mesh_pos$mesh$n,
-                      "  |  Orange = stations (0–", DEPTH_MAX, " m)"),
+    subtitle = paste0("N nœuds = ", mesh_pos$mesh$n),
     x = "Eastings (km)", y = "Northings (km)"
   ) +
   theme_bw() +
@@ -144,18 +150,31 @@ m_null <- sdmTMB(
   spatiotemporal = "off"
 )
 
-# m_spatemp <- sdmTMB(
-#   CPUE ~ 1,
-#   data = dat_pos,
-#   mesh = bspde_pos,
-#   family = Gamma(link = "log"),
-#   spatial = "on",
-#   spatiotemporal = "iid"
-# )
+m_spatial <- sdmTMB(
+  CPUE ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  spatiotemporal = "off"
+)
+
+
+m_spatemp <- sdmTMB(
+  CPUE ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
 
 #5. Contrôle des modèles ---------------------------------
 
 sanity(m_null)
+sanity(m_spatial)
+sanity(m_spatemp)
 
 dat_pos$resids <- residuals(m_null)
 hist_residual <- ggplot(dat_pos, aes(x = resids)) +
@@ -178,7 +197,7 @@ QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
 
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "residual-histogramme.png"),
+    filename = file.path("data/", output_plot, "residual-histogramme-m-null.png"),
     plot     = hist_residual,
     width    = 8,
     height   = 6,
@@ -188,13 +207,97 @@ if (SavePlots) {
 
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "qqplot_residual.png"),
+    filename = file.path("data/", output_plot, "qqplot_residual-m-null.png"),
     plot     = QQplot,
     width    = 8,
     height   = 6,
     dpi      = 300
   )
 }
+
+
+dat_pos$resids <- residuals(m_spatial)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+  theme_bw()
+
+s <- simulate(m_spatial, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_spatial, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "residual-histogramme-spatial.png"),
+    plot     = hist_residual,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "qqplot_residual-spatial.png"),
+    plot     = QQplot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+
+dat_pos$resids <- residuals(m_spatemp)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+  theme_bw()
+
+s <- simulate(m_spatemp, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_spatemp, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "residual-histogramme-m-spatemp.png"),
+    plot     = hist_residual,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "qqplot_residual-m-spatemp.png"),
+    plot     = QQplot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
 
 
 #6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
@@ -269,7 +372,7 @@ mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
 
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "mean_map.png"),
+    filename = file.path("data/", output_plot, "mean_map_null.png"),
     plot     = mean_map,
     width    = 8,
     height   = 6,
