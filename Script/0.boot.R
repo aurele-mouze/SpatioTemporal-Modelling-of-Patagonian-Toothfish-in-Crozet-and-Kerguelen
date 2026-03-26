@@ -36,4 +36,5 @@ dir.create(here("data/", output_carte),
 source("Function/choose_mesh.R")
 source("Function/filtre_flag_dynamique.R")
 source("Function/barrier_mesh.R")
-#source("Function/KER_map.R")
+source("Function/predict_in_chunks.R")
+source("Function/pseudo_R2.R")

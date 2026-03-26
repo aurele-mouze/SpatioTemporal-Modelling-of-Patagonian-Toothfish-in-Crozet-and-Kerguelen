@@ -72,113 +72,93 @@ dat_sf <- st_transform(dat_sf, 32742)
 
 coords <- st_coordinates(dat_sf)
 
-dat_clean$X <- coords[,1] / 1000
-dat_clean$Y <- coords[,2] / 1000
+dat_pres <- dat_clean %>%
+  mutate(pres = as.integer(CPUE > 0))
 
-Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")
-Study_domain_Hole <- st_transform(Study_domain_Hole, 32742)
+dat_pos <- dat_pres %>% filter(CPUE > 0, prof_bathy >= 500)
+
+
+Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
+  mutate(geometry = st_geometry(.) / 1000)
 
 # Update CRS to indicate units in kilometers (custom CRS)
-Study_domain_Hole <- Study_domain_Hole %>%
-  mutate(geometry = st_geometry(.) / 1000)
+
 st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
 
 
-mesh <- make_mesh(
-  dat_clean,
-  xy_cols = c("X", "Y"),
-  n_knots = 200
-)
+mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 200)
 
-plot(mesh)
 
 # Add Barrier to account for donut effect of the island
-bspde <- sdmTMBextra::add_barrier_mesh(
-  mesh,
-  Study_domain_Hole,
-  range_fraction = 0.1,
-  proj_scaling = 1,
-  plot = TRUE
-)
+bspde_pos <- sdmTMBextra::add_barrier_mesh(mesh_pos, Study_domain_Hole,
+                                           range_fraction = 0.1, proj_scaling = 1, plot = TRUE)
 
+cat("Mesh : N nœuds =", mesh_pos$mesh$n, "\n\n")
 
-# Plotting the mesh and barrier
-mesh_df_water <- bspde$mesh_sf[bspde$normal_triangles, ]
-mesh_df_land  <- bspde$mesh_sf[bspde$barrier_triangles, ]
+# Visualisation mesh
 
-ggplot() +
-  geom_sf(data = Study_domain_Hole, fill = NA, colour = "red", size = 1) +
-  geom_sf(data = mesh_df_water, colour = "blue") +
-  geom_sf(data = mesh_df_land, colour = "green") +
-  ggtitle("Mesh avec effet barrière") +
-  theme_minimal()
-
-plot(bspde)
-
-
-# Estimation du modèle GAMMA simple
-m_gamma <- sdmTMB(
-  formula = CPUE ~ prof_bathy,
-  data = dat_clean,
-  mesh = bspde,
-  family = tweedie(link = "log"),
-  spatial = TRUE   
+loc  <- mesh_pos$mesh$loc[, 1:2]
+idx  <- mesh_pos$mesh$graph$tv[, 1:3]
+segs <- lapply(seq_len(nrow(idx)), function(i) {
+  pts <- loc[idx[i, ], ]
+  st_linestring(rbind(pts, pts[1, ]))
+})
+mesh_lines <- st_sf(
+  geometry = st_sfc(segs),
+  crs = st_crs(Study_domain_Hole)  # utiliser le CRS de ton domaine
 )
 
 
 
-# Pour modèle sans temps
-# 5. Visualisation relation -----------------------------------------------
-# Vérification du modèle + graphes de relations CPUE ~ variables explicatives
-
-sanity(m_gamma)
-
-AIC(m_gamma)
-
-dat_clean$resids <- residuals(m_gamma)
-hist(dat_clean$resids)
-
-qqnorm(dat_clean$resids)
-abline(a = 0, b = 1)
-ggplot(dat_clean, aes(X, Y, col = resids)) + scale_colour_gradient2() +
-  geom_point() + facet_wrap(~Year) + coord_fixed()
-
-# Graphique : relation CPUE / profondeur
-pred_depth <- ggeffects::ggpredict(m_gamma, terms = "prof_bathy [all]")
-
-depth_graph = ggplot(pred_depth, aes(x = x, y = predicted)) +
-  geom_line(color = "blue", linewidth = 1) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
-  geom_point(
-    data = dat_clean,
-    aes(x = prof_bathy, y = CPUE),
-    inherit.aes = FALSE,
-    color = "red",
-    alpha = 0.5
+# Créer le plot
+mesh_plot <- ggplot() +
+  geom_sf(data = mesh_lines, color = "grey55", linewidth = 0.2) +
+  geom_point(data = dat_pos, aes(x = X, y = Y),
+             color = "orange", size = 1.2) +
+  geom_sf(data = Study_domain_Hole, fill = "grey80", color = "black") +
+  coord_sf(
+    xlim = range(dat_pos$X) + c(-30, 30),
+    ylim = range(dat_pos$Y) + c(-30, 30)
   ) +
-  labs(x = "Profondeur (en mètres)", y = "CPUE de la palangre (en g/hameçon)") +
-  theme_bw()
+  labs(
+    title = paste0("Mesh"),
+    subtitle = paste0("N nœuds = ", mesh_pos$mesh$n,
+                      "  |  Orange = stations (0–", DEPTH_MAX, " m)"),
+    x = "Eastings (km)", y = "Northings (km)"
+  ) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
 
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "relation_CPUE_Profondeur.png"),
-    plot     = depth_graph,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
+cat("→ mesh.png sauvegardé\n\n")
 
 
 
-# 6. Résidus --------------------------------------------------------------
-# Extraction et visualisation des résidus du modèle
-dat_clean$resids <- residuals(m_gamma, type = "mle-mvn")
 
-# Histogramme des résidus
+# Estimation du modèle GAMMA simple, sans effets
+m_null <- sdmTMB(
+  CPUE ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "off",
+  spatiotemporal = "off"
+)
 
-hist_residual <- ggplot(dat_clean, aes(x = resids)) +
+# m_spatemp <- sdmTMB(
+#   CPUE ~ 1,
+#   data = dat_pos,
+#   mesh = bspde_pos,
+#   family = Gamma(link = "log"),
+#   spatial = "on",
+#   spatiotemporal = "iid"
+# )
+
+#5. Contrôle des modèles ---------------------------------
+
+sanity(m_null)
+
+dat_pos$resids <- residuals(m_null)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
   geom_histogram(
     bins = 30,
     fill = "steelblue",
@@ -188,9 +168,17 @@ hist_residual <- ggplot(dat_clean, aes(x = resids)) +
   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
   theme_bw()
 
+s <- simulate(m_null, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_null, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "hist_residuals.png"),
+    filename = file.path("data/", output_plot, "residual-histogramme.png"),
     plot     = hist_residual,
     width    = 8,
     height   = 6,
@@ -198,41 +186,27 @@ if (SavePlots) {
   )
 }
 
-# QQplot des résidus
-
-qqplot_resdat = dat_clean %>% ggplot(aes(sample = resids)) +
-  geom_abline(slope = 1,
-              intercept = 0,
-              col = 'red') +
-  stat_qq() +
-  stat_qq_line() + theme_bw()
-
 if (SavePlots) {
   ggsave(
     filename = file.path("data/", output_plot, "qqplot_residual.png"),
-    plot     = qqplot_resdat,
+    plot     = QQplot,
     width    = 8,
     height   = 6,
     dpi      = 300
   )
 }
 
-# Simulation des résidus de type DHARMa
 
-s <- simulate(m_gamma, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_gamma, test_uniformity = TRUE)
-
-
-# 7. Grilles d’extrapolation ----------------------------------------------
+#6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
 # Import et préparation de la grille d’extrapolation spatiale
 Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapol.rds"))
 
 # Mise à l’échelle de la profondeur et de la pente sur la grille
-Mean_SD <- dat_clean %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))
 Extrapol_grid = Extrapol_grid %>% rename(depth = profondeur.pred)
 Extrapol_grid <- Extrapol_grid %>% mutate(depth_scaled = (depth - Mean_SD$Mean) / Mean_SD$SD)
 
-Mean_SD <- dat_clean %>% ungroup() %>% summarise(Mean = mean(slope), SD = sd(slope))
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(slope), SD = sd(slope))
 Extrapol_grid <- Extrapol_grid %>% mutate(slope_scaled = (slope - Mean_SD$Mean) / Mean_SD$SD)
 
 # Nettoyage et sélection des colonnes nécessaires pour la prédiction
@@ -250,144 +224,57 @@ grid <- Extrapol_grid %>%
   dplyr::select(depth_scaled, slope_scaled, slope, depth, nb_ham, tps_h, X, Y) %>%
   rename(prof_bathy = depth)
 
+#7. Prédictions -----------------------------------
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
 
-# 8. Prédiction -----------------------------------------------------------
-# Prédictions du modèle sur la grille avec séparation des effets
-predictions <- predict(m_gamma, newdata = grid, return_tmb_object = TRUE)
-grid$est <- predictions$data$est
-grid$est_non_rf <- predictions$data$est_non_rf
-grid$est_rf <- predictions$data$est_rf
-grid$omega_s  <- predictions$data$omega_s
-grid$epsilon_st <- predictions$data$epsilon_st
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
 
-# Transformation des coordonnées pour passer en latitude / longitude
-grid$X <- grid$X * 1000
-grid$Y <- grid$Y * 1000
-grid_sf <- st_as_sf(grid, coords = c("X", "Y"), crs = 32742)
-grid_sf_transformed <- st_transform(grid_sf, crs = 4326)
-grid$Lon <- st_coordinates(grid_sf_transformed)[, 1]
-grid$Lat <- st_coordinates(grid_sf_transformed)[, 2]
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  relocate(cell_id)
 
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict_in_chunks(m_null, grid_all_years, chunk_size = 20000)
 
-# 9. Génération des cartes de prédiction ----------------------------------
-# Génération des cartes de prédictions :
-# - prédiction globale
-# - prédiction effets fixes uniquement
-# - cartes des effets aléatoires (omega)
-r <- raster(extent(60, 76, -54, -44), resolution = c(0.0150, 0.0150))
-raster_data <- rasterize(grid[, c("Lon", "Lat")], r, field = grid$est)
-raster_df <- as.data.frame(raster_data, xy = TRUE)
+# Rattacher cell_id et transformer sur l'échelle réponse
+pred_grid <- pred_grid_raw %>%
+  mutate(cell_id = grid_all_years$cell_id,
+         CPUE_pred = est) %>%
+  left_join(grid_with_id %>% select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
 
-min = min(exp(raster_df$layer), na.rm = TRUE)
-max = max(exp(raster_df$layer), na.rm = TRUE)
+# Moyenne temporelle par cellule spatiale
+pred_mean_cell <- pred_grid %>%
+  group_by(cell_id, X, Y, prof_bathy) %>%
+  summarise(CPUE_mean = mean(CPUE_pred, na.rm = TRUE), .groups = "drop")
 
-
-# Carte de prédiction globale
-#load("data/KER_SHELF_map.RData")
-police_size <- 14
-
-global_predict = KER_SHELF_map +
-  geom_raster(data = raster_df, aes(x = x, y = y, fill = exp(layer))) +
-  scale_fill_gradientn(
-    name = "CPUE (g par ham)",
-    trans = "log",
-    colours = c("#440154", "#31688E", "#35B779", "#FDE725"),
-    # palette fixe (ex : viridis)
-    limits = c(min, max),
-    na.value = NA
-  ) +
-  theme_bw() +
-  xlab("Longitude") + ylab("Latitude") +
-  ggtitle("Prédiction globale de la CPUE") +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    axis.title.x = element_text(size = police_size),
-    axis.title.y = element_text(size = police_size),
-    axis.text.x = element_text(size = police_size),
-    axis.text.y = element_text(size = police_size),
-    legend.title = element_text(size = police_size),
-    legend.text = element_text(size = police_size),
-    strip.text = element_text(size = police_size)
-  )
+#  Carte moyenne -> sortie tout effets confondus
+mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", name = "CPUE moyenne") +
+  coord_equal() +
+  labs(title = "log CPUE moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+  theme_minimal()
 
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "global_predict.png"),
-    plot     = global_predict,
+    filename = file.path("data/", output_plot, "mean_map.png"),
+    plot     = mean_map,
     width    = 8,
     height   = 6,
     dpi      = 300
   )
 }
-
-# Carte de prédiction effets fixes uniquement
-r <- raster(extent(60, 76, -54, -44), resolution = c(0.0150, 0.0150))
-raster_data <- rasterize(grid[, c("Lon", "Lat")], r, field = grid$est_non_rf)
-raster_df <- as.data.frame(raster_data, xy = TRUE)
-
-#load("data/KER_SHELF_map.RData")
-police_size <- 16
-
-fixed_effect_predict = KER_SHELF_map +
-  geom_raster(data = raster_df, aes(x = x, y = y, fill = exp(layer))) +
-  scale_fill_gradientn(
-    name = "CPUE (g par ham)",
-    trans = "log",
-    colours = c("#440154", "#31688E", "#35B779", "#FDE725"),
-    # palette fixe (ex : viridis)
-    limits = c(min, max),
-    na.value = NA
-  ) +
-  theme_bw() +
-  xlab("Longitude") + ylab("Latitude") +
-  ggtitle("Prédiction uniquement à partir des effets fixes") +
-  theme(
-    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-    axis.title.x = element_text(size = police_size),
-    axis.title.y = element_text(size = police_size),
-    axis.text.x = element_text(size = police_size),
-    axis.text.y = element_text(size = police_size),
-    legend.title = element_text(size = police_size),
-    legend.text = element_text(size = police_size),
-    strip.text = element_text(size = police_size)
-  )
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "fixed_effect_predict.png"),
-    plot     = fixed_effect_predict,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-# Carte des effets spatiaux aléatoires omega
-r <- raster(extent(60, 76, -54, -44), resolution = c(0.0150, 0.0150))
-raster_data <- rasterize(grid[, c("Lon", "Lat")], r, field = grid$omega_s)
-raster_df <- as.data.frame(raster_data, xy = TRUE)
-
-#load("data/KER_SHELF_map.RData")
-police_size <- 16
-
-omega_effect = KER_SHELF_map +
-  geom_raster(data = raster_df, aes(x = x, y = y, fill = layer)) +
-  scale_fill_viridis_c(name = "Omega_s", na.value = NA)  +
-  theme_bw() + xlab("Longitude") + ylab("Latitude") +
-  ggtitle("Effets spatiaux aléatoires uniquement ~ omega")
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "omega_effect.png"),
-    plot     = omega_effect,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
 
 
