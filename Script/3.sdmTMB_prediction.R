@@ -494,3 +494,38 @@ if (SavePlots) {
 }
 
 
+annees <- sort(unique(dat_pos$Year))
+
+liste_cartes <- list()
+
+
+for (an in annees) {
+  # filtrer l'année
+  pred_year <- pred_grid %>%
+    filter(Year == an)
+  
+  # carte année courante
+  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
+    geom_raster() +
+    scale_fill_viridis_c(option = "viridis", name = "CPUE prédite") +
+    coord_equal() +
+    labs(
+      title = paste("CPUE prédite - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    theme_minimal()
+  
+  # stocker dans liste
+  liste_cartes[[as.character(an)]] <- carte
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, paste0("map_CPUE_", an, ".png")),
+    plot = carte,
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+}
