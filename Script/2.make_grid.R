@@ -17,6 +17,7 @@ print(map_grid_1km)
 plot(map_grid_1km)
 
 map_df = terra::as.data.frame(map_grid_1km, xy = TRUE)
+map_df <- map_df %>% filter(!is.na(profondeur.pred))
 map_df$slope[is.na(map_df$slope)] <- 0
 
 head(map_df)

@@ -32,7 +32,9 @@ biometrie <- biometrie %>%
 
 data_all_cap <- capture %>%
   filter(
-    Plateau == "kerguelen"
+    Plateau == "kerguelen",
+    between(HaulStartLon, 66, 67.5),
+    between(HaulStartLat,  -50, -48.5)
     
   )
 
@@ -128,7 +130,7 @@ for (i in seq_len(nrow(data_all_cap_nonnull))) {
   segment <- rbind(start_coords, end_coords)
   line <- vect(segment, type = "lines", crs = crs(map))
   
-  spacing <- data_all_cap_nonnull$distance[i] / 10
+  spacing <- data_all_cap_nonnull$distance[i] 
   line_densified <- densify(line, spacing)
   line_densified$StationID <- data_all_cap_nonnull$StationID[i]
   
@@ -431,7 +433,7 @@ for (i in seq_len(nrow(data_all_cap_nonnull))) {
   segment <- rbind(start_coords, end_coords)
   line <- vect(segment, type = "lines", crs = crs(map))
   
-  spacing <- data_all_cap_nonnull$distance[i] / 10
+  spacing <- data_all_cap_nonnull$distance[i]
   line_densified <- densify(line, spacing)
   line_densified$StationID <- data_all_cap_nonnull$StationID[i]
   

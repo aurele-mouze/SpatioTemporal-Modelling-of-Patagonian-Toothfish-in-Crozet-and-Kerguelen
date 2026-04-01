@@ -5,6 +5,7 @@
 data_modelo = readRDS("data/outputs/df/data_modelo.rds")
 
 
+
 # 2. Préparation des données ----------------------------------------------
 # Selon la valeur de "repartition", on prépare les données différemment :
 # - Cas repartition = TRUE : normalisation par ID, calcul du nb_ham et du poids par section
@@ -76,6 +77,13 @@ dat_pres <- dat_clean %>%
   mutate(pres = as.integer(CPUE > 0))
 
 dat_pos <- dat_pres %>% filter(CPUE > 0, prof_bathy >= 500)
+
+# Calcul du 95e percentile de la CPUE
+cpue_95 <- quantile(dat_pos$CPUE, probs = 0.95, na.rm = TRUE)
+
+# Filtrer les données pour ne garder que celles <= 95e percentile
+dat_pos <- dat_pos %>%
+  filter(CPUE <= cpue_95)
 
 
 Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
@@ -317,8 +325,8 @@ grid <- Extrapol_grid %>%
   mutate(
     nb_ham = nb_ham,
     tps_h = mean(dat$tps_h),
-    x = x / 1000,
-    y = y / 1000
+    x = (x - min(x)) / 1000 + min(dat_pos$X),
+    y = (y - min(y)) / 1000 + min(dat_pos$Y)
   ) %>%
   filter(!is.na(slope_scaled)) %>%
   filter(!is.na(depth_scaled)) %>%
@@ -329,62 +337,60 @@ grid <- Extrapol_grid %>%
 
 #7. Prédictions -----------------------------------
 # Vérifications rapides
-# stopifnot("Year" %in% names(dat_pos))
-# stopifnot(is.numeric(dat_pos$Year))
-# 
-# #Préparer grid avec un identifiant de cellule
-# grid_with_id <- grid %>%
-#   mutate(cell_id = row_number())
-# 
-# #Réplication temporelle : une ligne par cellule × année
-# years <- sort(unique(dat_pos$Year))
-# grid_all_years <- grid_with_id %>%
-#   tidyr::uncount(length(years)) %>%
-#   mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
-#   relocate(cell_id)
-# 
-# #Vérifier colonnes requises
-# required_cols <- c("prof_bathy", "Year", "X", "Y")
-# missing_cols <- setdiff(required_cols, names(grid_all_years))
-# if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
-# 
-# # Prédiction (utilise chunking si nécessaire)
-# pred_grid_raw <- predict_in_chunks(m_null, grid_all_years, chunk_size = 20000)
-# 
-# # Rattacher cell_id et transformer sur l'échelle réponse
-# pred_grid <- pred_grid_raw %>%
-#   mutate(cell_id = grid_all_years$cell_id,
-#          CPUE_pred = est) %>%
-#   left_join(grid_with_id %>% select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
-# 
-# # Moyenne temporelle par cellule spatiale
-# pred_mean_cell <- pred_grid %>%
-#   group_by(cell_id, X, Y, prof_bathy) %>%
-#   summarise(CPUE_mean = mean(CPUE_pred, na.rm = TRUE), .groups = "drop")
-# 
-# #  Carte moyenne -> sortie tout effets confondus
-# mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
-#   geom_raster() +
-#   scale_fill_viridis_c(option = "viridis", name = "CPUE moyenne") +
-#   coord_equal() +
-#   labs(title = "log CPUE moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
-#   theme_minimal()
-# 
-# if (SavePlots) {
-#   ggsave(
-#     filename = file.path("data/", output_plot, "mean_map_null.png"),
-#     plot     = mean_map,
-#     width    = 8,
-#     height   = 6,
-#     dpi      = 300
-#   )
-# }
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict_in_chunks(m_null, grid_all_years, chunk_size = 20000)
+
+# Rattacher cell_id et transformer sur l'échelle réponse
+pred_grid <- pred_grid_raw %>%
+  mutate(cell_id = grid_all_years$cell_id,
+         CPUE_pred = est) %>%
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+
+histo <- ggplot(pred_grid, aes(x = "", y = exp(CPUE_pred))) +
+  geom_boxplot(fill = "lightgreen", outlier.color = "red") +
+  labs(
+    x = "",
+    y = "CPUE prédite",
+    title = "Boxplot des CPUE prédites par le modèle null"
+  ) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "mean_histo_null.png"),
+    plot     = histo,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
 
 
 
 
-# Vérifications rapides
+
+
+
 stopifnot("Year" %in% names(dat_pos))
 stopifnot(is.numeric(dat_pos$Year))
 
@@ -411,7 +417,7 @@ pred_grid_raw <- predict_in_chunks(m_spatial, grid_all_years, chunk_size = 20000
 pred_grid <- pred_grid_raw %>%
   mutate(cell_id = grid_all_years$cell_id,
          CPUE_pred = est) %>%
-  left_join(grid_with_id %>% select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
 
 # Moyenne temporelle par cellule spatiale
 pred_mean_cell <- pred_grid %>%
@@ -441,6 +447,7 @@ if (SavePlots) {
 
 
 
+
 # Vérifications rapides
 stopifnot("Year" %in% names(dat_pos))
 stopifnot(is.numeric(dat_pos$Year))
@@ -448,6 +455,8 @@ stopifnot(is.numeric(dat_pos$Year))
 #Préparer grid avec un identifiant de cellule
 grid_with_id <- grid %>%
   mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
 
 #Réplication temporelle : une ligne par cellule × année
 years <- sort(unique(dat_pos$Year))
@@ -464,11 +473,13 @@ if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(
 # Prédiction (utilise chunking si nécessaire)
 pred_grid_raw <- predict_in_chunks(m_spatemp, grid_all_years, chunk_size = 20000)
 
+
+
 # Rattacher cell_id et transformer sur l'échelle réponse
 pred_grid <- pred_grid_raw %>%
   mutate(cell_id = grid_all_years$cell_id,
          CPUE_pred = est) %>%
-  left_join(grid_with_id %>% select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
 
 # Moyenne temporelle par cellule spatiale
 pred_mean_cell <- pred_grid %>%
@@ -506,7 +517,7 @@ for (an in annees) {
   
   # carte année courante
   carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
-    geom_raster() +
+    geom_tile() +
     scale_fill_viridis_c(option = "viridis", name = "CPUE prédite") +
     coord_equal() +
     labs(
@@ -516,16 +527,12 @@ for (an in annees) {
     ) +
     theme_minimal()
   
-  # stocker dans liste
-  liste_cartes[[as.character(an)]] <- carte
-}
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, paste0("map_CPUE_", an, ".png")),
-    plot = carte,
-    width = 8,
-    height = 6,
-    dpi = 300
-  )
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_CPUE_pred_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
 }

@@ -92,11 +92,12 @@ grille_10km <- st_sf(
 
 dat_join <- st_join(dat_pos, grille_10km)
 
-grille_cpue <- left_join(
-  grille_10km,
-  st_drop_geometry(cpue_grille),
-  by = "id"
-)
+grille_cpue <- dat_join %>%
+  group_by(id) %>%
+  summarise(
+    CPUE_moy = mean(CPUE, na.rm = TRUE),
+    n_station = n()
+  )
 
 
 
@@ -145,7 +146,7 @@ mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + yla
           fill = "darkgrey",
           inherit.aes = F
   ) + 
-  geom_sf(data = grille_cpue, aes(fill = CPUE_moy), color = NA) +
+  geom_sf(data = grille_cpue, aes(fill = CPUE_moy), color = NA, alpha = 0.7) +
   # geom_sf(data = dat_sf, size = 1, color = "black") +
   scale_fill_viridis_c(na.value = "transparent") +
   theme_bw()
@@ -167,7 +168,7 @@ annees <- sort(unique(dat_pos$Year))
 liste_cartes <- list()
 
 cpue_moyenne_global <- dat_pos %>%
-  st_join(grille) %>%
+  st_join(grille_10km) %>%
   group_by(id) %>%
   summarise(CPUE_moy = mean(CPUE, na.rm = TRUE))
 
