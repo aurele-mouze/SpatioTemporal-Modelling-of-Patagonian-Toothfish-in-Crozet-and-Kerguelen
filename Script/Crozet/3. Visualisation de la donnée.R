@@ -64,6 +64,13 @@ dat_sf <- st_transform(dat_sf, 32742)
 
 coords <- st_coordinates(dat_sf)
 
+dat_clean <- dat_clean %>%
+  mutate(
+    X = coords[,1] / 1000,
+    Y = coords[,2] / 1000
+  )
+
+
 dat_pres <- dat_clean %>%
   mutate(pres = as.integer(CPUE > 0))
 

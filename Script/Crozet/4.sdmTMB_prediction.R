@@ -68,9 +68,15 @@ dat_clean <- dat %>% filter(!is.na(CPUE), !is.na(prof_bathy), !is.na(Year))
 
 dat_sf <- st_as_sf(dat_clean, coords = c("x","y"), crs = 4326)
 
-dat_sf <- st_transform(dat_sf, 32742)
+dat_sf <- st_transform(dat_sf, 32743)
 
 coords <- st_coordinates(dat_sf)
+
+dat_clean <- dat_clean %>%
+  mutate(
+    X = coords[,1] / 1000,
+    Y = coords[,2] / 1000
+  )
 
 dat_pres <- dat_clean %>%
   mutate(pres = as.integer(CPUE > 0))
@@ -177,6 +183,18 @@ m_spatial <- sdmTMB(
 
 m_spatemp <- sdmTMB(
   CPUE ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
+
+
+
+m_0 <- sdmTMB(
+  CPUE ~ s(Year),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -315,6 +333,51 @@ if (SavePlots) {
 
 
 
+
+
+dat_pos$resids <- residuals(m_0)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+  theme_bw()
+
+s <- simulate(m_0, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_0, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "residual-histogramme-m-0.png"),
+    plot     = hist_residual,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "qqplot_residual-m-0.png"),
+    plot     = QQplot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+
+
 #6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
 # Import et préparation de la grille d’extrapolation spatiale
 Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapolCRO.rds"))
@@ -332,8 +395,8 @@ grid <- Extrapol_grid %>%
   mutate(
     nb_ham = nb_ham,
     tps_h = mean(dat$tps_h),
-    x = (x - min(x)) / 1000 + min(dat_pos$X),
-    y = (y - min(y)) / 1000 + min(dat_pos$Y)
+    x = x / 1000 ,
+    y = y / 1000 
   ) %>%
   filter(!is.na(slope_scaled)) %>%
   filter(!is.na(depth_scaled)) %>%
@@ -545,4 +608,385 @@ for (an in annees) {
 }
 
 
+# Effet spatial
+grid_spatial <- grid %>%
+  mutate(Year = 2015)
+pred_spatial <- predict(m_spatemp, newdata = grid_spatial)
+
+grid_spatial$effet_spatial <- pred_spatial$omega_s
+
+lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
+
+Spat_effect <- ggplot() +
+  
+  # fond gris sur toute l'emprise
+  annotate(
+    "rect",
+    xmin = min(grid_spatial$X),
+    xmax = max(grid_spatial$X),
+    ymin = min(grid_spatial$Y),
+    ymax = max(grid_spatial$Y),
+    fill = "grey80",
+    alpha = 0.4
+  ) +
+  
+  # raster prédit
+  geom_raster(
+    data = grid_spatial,
+    aes(X, Y, fill = effet_spatial)
+  ) +
+  
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    limits = c(-lim, lim),
+    name = "Effet spatial"
+  ) +
+  
+  coord_equal() +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_spatial.png"),
+    plot     = Spat_effect,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+# Effet Spatio-temporel
+
+pred_spatiotemp <- predict(m_spatemp, newdata = grid_all_years)
+
+grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
+
+
+annees <- sort(unique(grid_all_years$Year))
+
+liste_cartes_spatiotemp <- list()
+
+lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
+
+for (an in annees) {
+  
+  pred_year <- grid_all_years %>%
+    filter(Year == an)
+  
+  carte <- ggplot() +
+    
+    annotate(
+      "rect",
+      xmin = min(grid_all_years$X),
+      xmax = max(grid_all_years$X),
+      ymin = min(grid_all_years$Y),
+      ymax = max(grid_all_years$Y),
+      fill = "grey90",
+      alpha = 0.4
+    ) +
+    
+    geom_raster(
+      data = pred_year,
+      aes(X, Y, fill = effet_spatiotemp)
+    ) +
+    
+    scale_fill_gradient2(
+      low = "blue",
+      mid = "white",
+      high = "red",
+      midpoint = 0,
+      limits = c(-lim, lim),
+      name = "Effet spatio-temporel"
+    ) +
+    
+    coord_equal() +
+    
+    labs(
+      title = paste("Effet spatio-temporel - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+pred_fix <- predict(
+  m_spatemp,
+  newdata = grid_all_years,
+  re_form = NA
+)
+
+grid_all_years$effet_fixe <- pred_fix$est
+unique(grid_all_years$effet_fixe)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict_in_chunks(m_0, grid_all_years, chunk_size = 20000)
+
+
+
+# Rattacher cell_id et transformer sur l'échelle réponse
+pred_grid <- pred_grid_raw %>%
+  mutate(cell_id = grid_all_years$cell_id,
+         CPUE_pred = est) %>%
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+
+# Moyenne temporelle par cellule spatiale
+pred_mean_cell <- pred_grid %>%
+  group_by(cell_id, X, Y, prof_bathy) %>%
+  summarise(CPUE_mean = mean(CPUE_pred, na.rm = TRUE), .groups = "drop")
+
+#  Carte moyenne -> sortie tout effets confondus
+mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", name = "CPUE moyenne") +
+  coord_equal() +
+  labs(title = "CPUE moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "mean_map_m_0.png"),
+    plot     = mean_map,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+annees <- sort(unique(dat_pos$Year))
+
+liste_cartes <- list()
+
+
+for (an in annees) {
+  # filtrer l'année
+  pred_year <- pred_grid %>%
+    filter(Year == an)
+  
+  # carte année courante
+  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
+    geom_tile() +
+    scale_fill_viridis_c(option = "viridis", name = "CPUE prédite") +
+    coord_equal() +
+    labs(
+      title = paste("CPUE prédite - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_CPUE_pred_m_0_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+# Effet spatial
+grid_spatial <- grid %>%
+  mutate(Year = 2015)
+pred_spatial <- predict(m_0, newdata = grid_spatial)
+
+grid_spatial$effet_spatial <- pred_spatial$omega_s
+
+lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
+
+Spat_effect <- ggplot() +
+  
+  # fond gris sur toute l'emprise
+  annotate(
+    "rect",
+    xmin = min(grid_spatial$X),
+    xmax = max(grid_spatial$X),
+    ymin = min(grid_spatial$Y),
+    ymax = max(grid_spatial$Y),
+    fill = "grey80",
+    alpha = 0.4
+  ) +
+  
+  # raster prédit
+  geom_raster(
+    data = grid_spatial,
+    aes(X, Y, fill = effet_spatial)
+  ) +
+  
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    limits = c(-lim, lim),
+    name = "Effet spatial"
+  ) +
+  
+  coord_equal() +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_spatial_m_0.png"),
+    plot     = Spat_effect,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+# Effet Spatio-temporel
+
+pred_spatiotemp <- predict(m_0, newdata = grid_all_years)
+
+grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
+
+
+annees <- sort(unique(grid_all_years$Year))
+
+liste_cartes_spatiotemp <- list()
+
+lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
+
+for (an in annees) {
+  
+  pred_year <- grid_all_years %>%
+    filter(Year == an)
+  
+  carte <- ggplot() +
+    
+    annotate(
+      "rect",
+      xmin = min(grid_all_years$X),
+      xmax = max(grid_all_years$X),
+      ymin = min(grid_all_years$Y),
+      ymax = max(grid_all_years$Y),
+      fill = "grey90",
+      alpha = 0.4
+    ) +
+    
+    geom_raster(
+      data = pred_year,
+      aes(X, Y, fill = effet_spatiotemp)
+    ) +
+    
+    scale_fill_gradient2(
+      low = "blue",
+      mid = "white",
+      high = "red",
+      midpoint = 0,
+      limits = c(-lim, lim),
+      name = "Effet spatio-temporel"
+    ) +
+    
+    coord_equal() +
+    
+    labs(
+      title = paste("Effet spatio-temporel - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_m_0_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+pred_fix <- predict(
+  m_spatemp,
+  newdata = grid_all_years,
+  re_form = NA
+)
+
+grid_all_years$effet_fixe <- pred_fix$est
+unique(grid_all_years$effet_fixe)
+
+
+#Effet année
+pred_fix <- predict(
+  m_spatemp,
+  newdata = grid_all_years,
+  re_form = NA
+)
+
+grid_all_years$effet_annee <- pred_fix$est
+
+year_effect <- grid_all_years %>%
+  group_by(Year) %>%
+  summarise(effet = mean(effet_annee))
+
+Effet_An <- ggplot(year_effect, aes(Year, effet)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_annuel_m_0.png"),
+    plot     = Effet_An,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
