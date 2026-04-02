@@ -1,7 +1,7 @@
 # 1. Chargement des données -----------------------------------------------
 
 # On charge la table de données préparées pour la modélisation CPUE
-data_modelo = readRDS("data/outputs/df/data_modelo.rds")
+data_modelo = readRDS("data/outputs/df/data_modelo-crozet.rds")
 
 
 # 2. Préparation des données ----------------------------------------------
@@ -73,6 +73,21 @@ dat_pos <- dat_pres %>%
 
 dat_pos <- st_transform(dat_pos, 32742)
 
+# Calcul de la CPUE moyenne par station ou unité si besoin
+dat_summary <- dat_pos %>%
+  group_by(StationID) %>%   # ou juste summariser sur tout le jeu de données
+  summarise(CPUE_mean = mean(CPUE, na.rm = TRUE)) 
+
+# Boxplot avec intervalle de confiance 95%
+ggplot(dat_summary, aes(x = "", y = CPUE_mean)) +
+  geom_boxplot(outlier.color = "red", outlier.shape = 16, width = 0.3) +
+  labs(
+    x = "",
+    y = "CPUE moyenne",
+    title = "Boxplot de la CPUE moyenne avec IC 95%"
+  ) +
+  theme_minimal()
+
 # 4. Faire une carte avec les CPUE moyennes sur des carrées de (définir la résolution) ------------------------------
 
 #D'abord en moyenne sans prendre en compte l'année
@@ -99,11 +114,13 @@ grille_cpue <- dat_join %>%
     n_station = n()
   )
 
+#grille_cpue <- left_join(grille_10km, st_drop_geometry(cpue_grille), by = "id")
 
 
 
 
-mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + ylab("Latitude") +
+
+mean_obs <- ggplot() + xlim(48.5, 53.5) + ylim(-47.5, -45) + xlab("Longitude") + ylab("Latitude") +
   # geom_sf(
   #   data = RNN_AMP_sf %>% dplyr::filter(protection %in% c("R")),
   #   colour = "#b2182b",
@@ -146,7 +163,7 @@ mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + yla
           fill = "darkgrey",
           inherit.aes = F
   ) + 
-  geom_sf(data = grille_cpue, aes(fill = CPUE_moy), color = NA, alpha = 0.7) +
+  geom_sf(data = grille_cpue, aes(fill = CPUE_moy), color = NA) +
   # geom_sf(data = dat_sf, size = 1, color = "black") +
   scale_fill_viridis_c(na.value = "transparent") +
   theme_bw()
@@ -198,7 +215,7 @@ for (an in annees) {
   grille_cpue_ll <- st_transform(grille_cpue, 4326)
   
   carte <- ggplot() +
-    xlim(63.6, 73) + ylim(-52, -46) +
+    xlim(48.5, 53.5) + ylim(-47.5, -45) +
     xlab("Longitude") + ylab("Latitude") +
     
     geom_sf(

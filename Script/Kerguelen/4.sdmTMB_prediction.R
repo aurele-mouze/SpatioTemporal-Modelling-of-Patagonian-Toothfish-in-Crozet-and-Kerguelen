@@ -94,7 +94,7 @@ Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
 st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
 
 
-mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 200)
+mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 400)
 
 
 # Add Barrier to account for donut effect of the island
@@ -143,6 +143,18 @@ mesh_plot <- ggplot() +
   theme_bw() +
   theme(panel.grid = element_blank())
 
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "mesh_plot.png"),
+    plot     = mesh_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
 cat("→ mesh.png sauvegardé\n\n")
 
 
@@ -170,6 +182,17 @@ m_spatial <- sdmTMB(
 
 m_spatemp <- sdmTMB(
   CPUE ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
+
+
+m_0 <- sdmTMB(
+  CPUE ~ s(Year),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -536,3 +559,130 @@ for (an in annees) {
       dpi = 300
     )}
 }
+
+
+# Effet spatial
+grid_spatial <- grid %>%
+  mutate(Year = 2015)
+pred_spatial <- predict(m_spatemp, newdata = grid_spatial)
+
+grid_spatial$effet_spatial <- pred_spatial$omega_s
+
+lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
+
+Spat_effect <- ggplot() +
+  
+  # fond gris sur toute l'emprise
+  annotate(
+    "rect",
+    xmin = min(grid_spatial$X),
+    xmax = max(grid_spatial$X),
+    ymin = min(grid_spatial$Y),
+    ymax = max(grid_spatial$Y),
+    fill = "grey80",
+    alpha = 0.4
+  ) +
+  
+  # raster prédit
+  geom_raster(
+    data = grid_spatial,
+    aes(X, Y, fill = effet_spatial)
+  ) +
+  
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    limits = c(-lim, lim),
+    name = "Effet spatial"
+  ) +
+  
+  coord_equal() +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_spatial.png"),
+    plot     = Spat_effect,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+# Effet Spatio-temporel
+
+pred_spatiotemp <- predict(m_spatemp, newdata = grid_all_years)
+
+grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
+
+
+annees <- sort(unique(grid_all_years$Year))
+
+liste_cartes_spatiotemp <- list()
+
+lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
+
+for (an in annees) {
+  
+  pred_year <- grid_all_years %>%
+    filter(Year == an)
+  
+  carte <- ggplot() +
+    
+    annotate(
+      "rect",
+      xmin = min(grid_all_years$X),
+      xmax = max(grid_all_years$X),
+      ymin = min(grid_all_years$Y),
+      ymax = max(grid_all_years$Y),
+      fill = "grey90",
+      alpha = 0.4
+    ) +
+    
+    geom_raster(
+      data = pred_year,
+      aes(X, Y, fill = effet_spatiotemp)
+    ) +
+    
+    scale_fill_gradient2(
+      low = "blue",
+      mid = "white",
+      high = "red",
+      midpoint = 0,
+      limits = c(-lim, lim),
+      name = "Effet spatio-temporel"
+    ) +
+    
+    coord_equal() +
+    
+    labs(
+      title = paste("Effet spatio-temporel - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+pred_fix <- predict(
+  m_spatemp,
+  newdata = grid_all_years,
+  re_form = NA
+)
+
+grid_all_years$effet_fixe <- pred_fix$est
+unique(grid_all_years$effet_fixe)
+

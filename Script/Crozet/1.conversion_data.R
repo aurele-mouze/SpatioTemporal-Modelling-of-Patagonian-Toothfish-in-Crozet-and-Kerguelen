@@ -33,8 +33,8 @@ biometrie <- biometrie %>%
 data_all_cap <- capture %>%
   filter(
     Plateau == "kerguelen",
-    between(HaulStartLon, 66, 67.5),
-    between(HaulStartLat,  -50, -48.5)
+    between(HaulStartLon, 68, 75),
+    between(HaulStartLat, -52, -47)
     
   )
 
@@ -130,7 +130,7 @@ for (i in seq_len(nrow(data_all_cap_nonnull))) {
   segment <- rbind(start_coords, end_coords)
   line <- vect(segment, type = "lines", crs = crs(map))
   
-  spacing <- data_all_cap_nonnull$distance[i] 
+  spacing <- data_all_cap_nonnull$distance[i]
   line_densified <- densify(line, spacing)
   line_densified$StationID <- data_all_cap_nonnull$StationID[i]
   
@@ -337,7 +337,9 @@ saveRDS(data_modelo, file = here("data", output_df, "data_modelo.rds"))
 
 data_all_cap <- capture %>%
   filter(
-    Plateau == "crozet"
+    Plateau == "crozet",
+    between(HaulStartLon, 48.5, 53.5),
+    between(HaulStartLat, -47.5, -45)
     
   )
 
@@ -416,7 +418,7 @@ data_all_cap = left_join(data_all_cap, diff_taille, by = c("StationID"))
 # Calcul de la variation de profondeur ------------------------------------------
 
 # Chargement du raster bathymétrique
-map = rast(here(path_rast_bathy, 'ras_bathy_pecheker_interpol.tif'))
+map = rast(here(path_rast_bathy, 'ras_bathy_pecheker_interpolCRO.tif'))
 plot(map)
 
 # Initialisation de la liste pour stocker les lignes densifiées
@@ -496,7 +498,7 @@ data_all_cap <- data_all_cap_nonnull %>%
 points_mid_slope <- points_mid
 
 # Charger le raster de pente
-slope_map <- rast(here(path_rast_bathy, 'ras_slope_pecheker_interpol.tif'))
+slope_map <- rast(here(path_rast_bathy, 'ras_slope_pecheker_interpolCRO.tif'))
 
 # Extraction des valeurs de pente
 coords_mid <- cbind(points_mid_slope$x_mid, points_mid_slope$y_mid)
