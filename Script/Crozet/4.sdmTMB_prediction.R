@@ -317,7 +317,7 @@ if (SavePlots) {
 
 #6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
 # Import et préparation de la grille d’extrapolation spatiale
-Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapol.rds"))
+Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapolCRO.rds"))
 
 # Mise à l’échelle de la profondeur et de la pente sur la grille
 Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))

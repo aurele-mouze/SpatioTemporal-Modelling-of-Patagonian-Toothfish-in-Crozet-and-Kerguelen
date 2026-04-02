@@ -516,6 +516,8 @@ m_04 <- sdmTMB(
 
 
 sdmTMB::tidy(m_0, "ran_pars")
-sdmTMB::tidy(m_01, "ran_pars")
 sdmTMB::tidy(m_02, "ran_pars")
+sdmTMB::tidy(m_03, "ran_pars")
 sdmTMB::tidy(m_04, "ran_pars")
+
+AIC(m_0, m_02, m_03, m_04)

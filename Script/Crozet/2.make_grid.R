@@ -21,5 +21,5 @@ map_df$slope[is.na(map_df$slope)] <- 0
 
 head(map_df)
 
-saveRDS(map_df, file = here("data", output_df, "grid_extrapol.rds"))
+saveRDS(map_df, file = here("data", output_df, "grid_extrapolCRO.rds"))
 
