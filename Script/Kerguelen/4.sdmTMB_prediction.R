@@ -207,6 +207,17 @@ m_0 <- sdmTMB(
   spatiotemporal = "iid"
 )
 
+m_1 <- sdmTMB(
+  CPUE ~ s(Year),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid",
+  spatial_varying = ~ -1 + Month
+)
+
 #5. Contrôle des modèles ---------------------------------
 
 sanity(m_null)
@@ -938,3 +949,295 @@ if (SavePlots) {
     dpi      = 300
   )
 }
+
+
+
+
+
+#d. m_1
+
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict_in_chunks(m_1, grid_all_years, chunk_size = 20000)
+
+
+
+# Rattacher cell_id et transformer sur l'échelle réponse
+pred_grid <- pred_grid_raw %>%
+  mutate(cell_id = grid_all_years$cell_id,
+         CPUE_pred = est) %>%
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+
+# Moyenne temporelle par cellule spatiale
+pred_mean_cell <- pred_grid %>%
+  group_by(cell_id, X, Y, prof_bathy) %>%
+  summarise(CPUE_mean = mean(CPUE_pred, na.rm = TRUE), .groups = "drop")
+
+#  Carte moyenne -> sortie tout effets confondus
+mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", name = "CPUE moyenne") +
+  coord_equal() +
+  labs(title = "CPUE moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "mean_map_m_1.png"),
+    plot     = mean_map,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+annees <- sort(unique(dat_pos$Year))
+
+liste_cartes <- list()
+
+
+for (an in annees) {
+  # filtrer l'année
+  pred_year <- pred_grid %>%
+    filter(Year == an)
+  
+  # carte année courante
+  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
+    geom_tile() +
+    scale_fill_viridis_c(option = "viridis", name = "CPUE prédite") +
+    coord_equal() +
+    labs(
+      title = paste("CPUE prédite - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_CPUE_pred_m_1_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+mois <- sort(unique(dat_pos$Month))
+
+liste_cartes <- list()
+
+
+for (mo in mois) {
+  # filtrer l'année
+  pred_year <- pred_grid %>%
+    filter(Month == mo)
+  
+  # carte année courante
+  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
+    geom_tile() +
+    scale_fill_viridis_c(option = "viridis", name = "CPUE prédite") +
+    coord_equal() +
+    labs(
+      title = paste("CPUE prédite - Mois", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_CPUE_pred_mois_m_1_", mo, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+
+
+# Effet spatial
+grid_spatial <- grid %>%
+  mutate(Year = 2015)
+pred_spatial <- predict(m_1, newdata = grid_spatial)
+
+grid_spatial$effet_spatial <- pred_spatial$omega_s
+
+lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
+
+Spat_effect <- ggplot() +
+  
+  # fond gris sur toute l'emprise
+  annotate(
+    "rect",
+    xmin = min(grid_spatial$X),
+    xmax = max(grid_spatial$X),
+    ymin = min(grid_spatial$Y),
+    ymax = max(grid_spatial$Y),
+    fill = "grey80",
+    alpha = 0.4
+  ) +
+  
+  # raster prédit
+  geom_raster(
+    data = grid_spatial,
+    aes(X, Y, fill = effet_spatial)
+  ) +
+  
+  scale_fill_gradient2(
+    low = "blue",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    limits = c(-lim, lim),
+    name = "Effet spatial"
+  ) +
+  
+  coord_equal() +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_spatial_m_1.png"),
+    plot     = Spat_effect,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+# Effet Spatio-temporel
+
+pred_spatiotemp <- predict(m_1, newdata = grid_all_years)
+
+grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
+
+
+annees <- sort(unique(grid_all_years$Year))
+
+liste_cartes_spatiotemp <- list()
+
+lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
+
+for (an in annees) {
+  
+  pred_year <- grid_all_years %>%
+    filter(Year == an)
+  
+  carte <- ggplot() +
+    
+    annotate(
+      "rect",
+      xmin = min(grid_all_years$X),
+      xmax = max(grid_all_years$X),
+      ymin = min(grid_all_years$Y),
+      ymax = max(grid_all_years$Y),
+      fill = "grey90",
+      alpha = 0.4
+    ) +
+    
+    geom_raster(
+      data = pred_year,
+      aes(X, Y, fill = effet_spatiotemp)
+    ) +
+    
+    scale_fill_gradient2(
+      low = "blue",
+      mid = "white",
+      high = "red",
+      midpoint = 0,
+      limits = c(-lim, lim),
+      name = "Effet spatio-temporel"
+    ) +
+    
+    coord_equal() +
+    
+    labs(
+      title = paste("Effet spatio-temporel - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_m_1_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+pred_fix <- predict(
+  m_1,
+  newdata = grid_all_years,
+  re_form = NA
+)
+
+grid_all_years$effet_fixe <- pred_fix$est
+unique(grid_all_years$effet_fixe)
+
+
+#Effet année
+pred_fix <- predict(
+  m_spatemp,
+  newdata = grid_all_years,
+  re_form = NA
+)
+
+grid_all_years$effet_annee <- pred_fix$est
+
+year_effect <- grid_all_years %>%
+  group_by(Year) %>%
+  summarise(effet = mean(effet_annee))
+
+Effet_An <- ggplot(year_effect, aes(Year, effet)) +
+  geom_line() +
+  geom_point() +
+  theme_minimal()
+
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_annuel_m_1.png"),
+    plot     = Effet_An,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+
+
+
+

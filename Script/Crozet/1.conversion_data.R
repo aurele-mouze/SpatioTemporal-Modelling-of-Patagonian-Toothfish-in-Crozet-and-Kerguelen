@@ -288,7 +288,11 @@ data_modelo = left_join(data_modelo, data_CPUE, by = c("StationID"))
 
 
 data_modelo <- data_modelo %>%
-  mutate(Year = year(HaulEndDate))
+  mutate(
+    Year = year(HaulEndDate),
+    Month = month(HaulEndDate)
+  )
+
 
 # Renommage et transformation finale
 data_modelo = data_modelo %>%

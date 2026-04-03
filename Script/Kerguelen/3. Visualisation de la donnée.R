@@ -398,3 +398,115 @@ if (SavePlots) {
     dpi      = 300
   )
 }
+
+
+# Mois
+
+month <- ggplot(dat_pos, aes(x = factor(Month))) +
+  geom_bar(fill = "steelblue") +
+  labs(
+    x = "Mois",
+    y = "Nombre d'observations",
+    title = "Nombre d'observations par mois"
+  ) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "obs_month.png"),
+    plot     = month,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+
+mois <- sort(unique(dat_pos$Month))
+
+liste_cartes <- list()
+
+cpue_moyenne_global <- dat_pos %>%
+  st_join(grille_10km) %>%
+  group_by(id) %>%
+  summarise(CPUE_moy = mean(CPUE, na.rm = TRUE))
+
+
+limites <- quantile(cpue_moyenne_global$CPUE_moy, probs = c(0, 0.95), na.rm = TRUE)
+
+for (an in mois) {
+  
+  dat_an <- dat_pos %>%
+    filter(Month == an)
+  
+  dat_join <- st_join(dat_an, grille_10km)
+  
+  cpue_grille <- dat_join %>%
+    group_by(id) %>%
+    summarise(
+      CPUE_moy = mean(CPUE, na.rm = TRUE),
+      n_station = n()
+    )
+  
+  grille_cpue <- left_join(
+    grille_10km,
+    st_drop_geometry(cpue_grille),
+    by = "id"
+  )
+  
+  grille_cpue_ll <- st_transform(grille_cpue, 4326)
+  
+  carte <- ggplot() +
+    xlim(63.6, 73) + ylim(-52, -46) +
+    xlab("Longitude") + ylab("Latitude") +
+    
+    geom_sf(
+      data = Isobath_KER_sf %>% filter(level %in% c("-500")),
+      colour = "grey80",
+      inherit.aes = FALSE,
+      size = 0.5
+    ) +
+    geom_sf(
+      data = Isobath_KER_sf %>% filter(level %in% c("-1000")),
+      colour = "grey60",
+      inherit.aes = FALSE,
+      size = 0.5
+    ) +
+    geom_sf(
+      data = EEZ_sf,
+      fill = "transparent",
+      inherit.aes = FALSE,
+      size = 0.5
+    ) +
+    geom_sf(
+      data = FR_island_sf,
+      fill = "darkgrey",
+      inherit.aes = FALSE
+    ) +
+    geom_sf(
+      data = grille_cpue_ll,
+      aes(fill = CPUE_moy),
+      color = NA,
+      alpha = 0.7
+    ) +
+    scale_fill_viridis_c(
+      limits = limites,
+      na.value = "transparent",
+      name = "CPUE"
+    ) +
+    ggtitle(paste("Mois :", an))
+  
+  liste_cartes[[as.character(an)]] <- carte
+}
+
+for (an in mois) {
+  ggsave(
+    filename = file.path("data/", output_plot, paste0("CPUE_Mois_", an, ".png")),
+    plot     = liste_cartes[[as.character(an)]],
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
