@@ -64,7 +64,7 @@ noeuds <- 120
 
 
 # Supprime les lignes avec CPUE manquante
-dat_clean <- dat %>% filter(!is.na(CPUE), !is.na(prof_bathy), !is.na(Year))
+dat_clean <- dat %>% filter(!is.na(ScanNumber), !is.na(prof_bathy), !is.na(Year))
 
 dat_sf <- st_as_sf(dat_clean, coords = c("x","y"), crs = 4326)
 
@@ -79,14 +79,14 @@ dat_clean <- dat_clean %>%
   )
 
 dat_pres <- dat_clean %>%
-  mutate(pres = as.integer(CPUE > 0))
+  mutate(pres = as.integer(ScanNumber > 0))
 
-dat_pos <- dat_pres %>% filter(CPUE > 0, prof_bathy >= 500)
+dat_pos <- dat_pres %>% filter(ScanNumber > 0, prof_bathy >= 500)
 
-q95 <- quantile(dat_pos$CPUE, 0.95, na.rm = TRUE)
+q95 <- quantile(dat_pos$ScanNumber, 0.95, na.rm = TRUE)
 
 dat_pos <- dat_pos %>%
-  mutate(CPUE = pmin(CPUE, q95))
+  mutate(ScanNumber = pmin(ScanNumber, q95))
 
 
 Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
