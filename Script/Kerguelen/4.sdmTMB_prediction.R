@@ -971,10 +971,15 @@ years <- sort(unique(dat_pos$Year))
 months <- sort(unique(dat_pos$Month))
 grid_all_years <- grid_with_id %>%
   tidyr::uncount(length(years) * length(months)) %>%
+<<<<<<< HEAD
   mutate(
     Year = rep(years, each = nrow(grid_with_id) * length(months)),
     Month = rep(months, times = nrow(grid_with_id) * length(years))
   ) %>%
+=======
+  mutate(Year = rep(years, times = nrow(grid_with_id) * length(months)),
+         Month = rep(months, times = nrow(grid_with_id)* length(years))) %>%
+>>>>>>> b31b416fe6ca420fd30fa948508dea36dbaa203c
   relocate(cell_id)
 
 #Vérifier colonnes requises

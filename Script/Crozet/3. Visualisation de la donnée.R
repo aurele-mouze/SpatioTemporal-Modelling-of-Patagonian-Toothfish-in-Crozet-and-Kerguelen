@@ -337,7 +337,7 @@ for (an in mois) {
   grille_cpue_ll <- st_transform(grille_cpue, 4326)
   
   carte <- ggplot() +
-    xlim(63.6, 73) + ylim(-52, -46) +
+    xlim(48.5, 53.5) + ylim(-47.5, -45) +
     xlab("Longitude") + ylab("Latitude") +
     
     geom_sf(
@@ -388,3 +388,6 @@ for (an in mois) {
     dpi      = 300
   )
 }
+
+
+
