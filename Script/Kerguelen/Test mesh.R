@@ -210,7 +210,7 @@ Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
 st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
 
 
-mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 400)
+mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 5)
 
 
 # Add Barrier to account for donut effect of the island
@@ -326,7 +326,7 @@ Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
 st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
 
 
-mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 600)
+mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 30)
 
 
 # Add Barrier to account for donut effect of the island
@@ -440,7 +440,7 @@ Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
 st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
 
 
-mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 1000)
+mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 2000)
 
 
 # Add Barrier to account for donut effect of the island

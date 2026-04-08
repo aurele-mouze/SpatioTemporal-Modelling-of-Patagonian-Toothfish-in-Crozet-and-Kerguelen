@@ -1027,13 +1027,15 @@ grid_with_id <- dplyr::as_tibble(grid_with_id)
 
 #Réplication temporelle : une ligne par cellule × année
 years <- sort(unique(dat_pos$Year))
+months <- sort(unique(dat_pos$Month))
 grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  tidyr::uncount(length(years)*length(months)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id)*length(months)),
+         Month = rep(months, times = nrow(grid_with_id)*length(years))) %>%
   relocate(cell_id)
 
 #Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
+required_cols <- c("prof_bathy", "Year", "X", "Y", "Month")
 missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
@@ -1141,7 +1143,7 @@ for (mo in mois) {
 
 # Effet spatial
 grid_spatial <- grid %>%
-  mutate(Year = 2015)
+  mutate(Year = 2015, Month = 1)
 pred_spatial <- predict(m_1, newdata = grid_spatial)
 
 grid_spatial$effet_spatial <- pred_spatial$omega_s
