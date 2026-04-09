@@ -758,7 +758,7 @@ unique(grid_all_years$effet_fixe)
 
 
 
-
+#m_0
 
 # Vérifications rapides
 stopifnot("Year" %in% names(dat_pos))
@@ -966,92 +966,8 @@ for (an in annees) {
 }
 
 
-pred_fix <- predict(
-  m_spatemp,
-  newdata = grid_all_years,
-  re_form = NA
-)
+#Indice d'abondance
 
-grid_all_years$effet_fixe <- pred_fix$est
-unique(grid_all_years$effet_fixe)
-
-
-#Effet année
-pred_fix <- predict(
-  m_0,
-  newdata = grid_all_years,
-  re_form = NA
-)
-
-grid_all_years$effet_annee <- pred_fix$est
-
-year_effect <- grid_all_years %>%
-  group_by(Year) %>%
-  summarise(effet = mean(effet_annee))
-
-Effet_An <- ggplot(year_effect, aes(Year, effet)) +
-  geom_line() +
-  geom_point() +
-  theme_minimal()
-
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "Effet_annuel_m_0.png"),
-    plot     = Effet_An,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-pred_fix <- predict_in_chunks(
-  m_0,
-  newdata = grid_all_years,
-  re_form = NA,
-  se_fit = TRUE,
-  chunk_size = 20000
-)
-
-grid_all_years$fit <- pred_fix$est
-grid_all_years$se  <- pred_fix$est_se
-
-grid_all_years <- grid_all_years %>%
-  mutate(
-    lower = fit - 1.96 * se,
-    upper = fit + 1.96 * se
-  )
-
-year_effect <- grid_all_years %>%
-  group_by(Year) %>%
-  summarise(
-    fit   = mean(fit),
-    lower = mean(lower),
-    upper = mean(upper)
-  )
-
-Effet_An <- ggplot(year_effect, aes(x = factor(Year), y = effet_annee)) +
-  geom_boxplot() +
-  theme_minimal() +
-  labs(
-    x = "Année",
-    y = "Effet annuel",
-    title = "Distribution de l'effet annuel"
-  )
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "Effet_annuel_boxplot_m_1.png"),
-    plot     = Effet_An,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-#Problème allocation de mémoire
 grid_small <- grid_with_id %>%
   slice(seq(1, n(), by = 5))
 grid_yrs <- replicate_df(grid_small, "Year", unique(dat_pos$Year))
@@ -1062,16 +978,42 @@ index <- get_index(
   p_st,
   area = rep(4 * 5, nrow(grid_yrs))
 )
-ggplot(index, aes(year, est)) +
+Abundance_Index <- ggplot(index, aes(Year, est)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
-  geom_line(lwd = 1, colour = "grey30") +
-  labs(x = "Year", y = "Biomasse (nombre d'individus)")
+  geom_line(linewidth = 1, colour = "grey30") +
+  labs(x = "Year", y = "Biomasse (nombre d'individus)") +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Indice_abondance_m_0.png"),
+    plot     = Abundance_Index,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+#Visualisation des effets
+Year_effect <- ggeffects::ggpredict(m_0, "Year [all]") |> plot()
+
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_annuel_m_0.png"),
+    plot     = Year_effect,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
 
 
 
 
-
+#m_1
 # Vérifications rapides
 stopifnot("Year" %in% names(dat_pos))
 stopifnot(is.numeric(dat_pos$Year))
