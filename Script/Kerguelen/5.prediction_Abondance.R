@@ -1298,10 +1298,87 @@ if (SavePlots) {
 
 
 
-visreg(m_1, xvar = "Month")
+
+#Indice d'abondance
+
+grid_small <- grid_with_id %>%
+  slice(seq(1, n(), by = 5))
+grid_yrs <- replicate_df(grid_small, "Year", unique(dat_pos$Year))
+
+p_st <- predict(m_1, newdata = grid_yrs, 
+                return_tmb_object = TRUE)
+index <- get_index(
+  p_st,
+  area = rep(4 * 5, nrow(grid_yrs))
+)
+Abundance_Index <- ggplot(index, aes(Year, est)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  labs(x = "Year", y = "Biomasse (nombre d'individus)") +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Indice_abondance_m_1.png"),
+    plot     = Abundance_Index,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
 
+#Visualisation des effets
+# Effet marginal de Year, Month marginalisé
+# prédiction
+Year_effect <- ggpredict(m_1, terms = "Year [all]")
 
+# créer un objet ggplot
+Year_plot <- plot(Year_effect) + theme_bw()
+
+# afficher
+Year_plot
+
+# sauvegarder
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_annuel_m_1.png"),
+    plot     = Year_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+Month_effect <- ggpredict(
+  m_1,
+  terms = c("Month [all]", "Year [all]")
+)
+
+Month_effect_smooth <- Month_effect %>%
+  group_by(x) %>%
+  summarise(
+    predicted = mean(predicted),
+    conf.low = mean(conf.low),
+    conf.high = mean(conf.high)
+  )
+
+Month_plot <- ggplot(Month_effect_smooth, aes(x = x, y = predicted)) +
+  geom_line(colour = "black", size = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(x = "Month", y = "Effet marginal du mois") +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_mensuel_m_1.png"),
+    plot     = Month_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
 
 

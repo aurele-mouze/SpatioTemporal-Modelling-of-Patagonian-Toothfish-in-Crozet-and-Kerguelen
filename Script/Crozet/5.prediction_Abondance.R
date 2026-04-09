@@ -205,14 +205,13 @@ m_0 <- sdmTMB(
 
 
 m_1 <- sdmTMB(
-  ScanNumber ~ s(Year),
+  ScanNumber ~ s(Year) + s(Month),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
   spatial = "on",
   time= "Year",
   spatiotemporal = "iid",
-  spatial_varying = ~ -1 + Month
 )
 
 
@@ -1256,44 +1255,92 @@ for (an in annees) {
 }
 
 
-pred_fix <- predict(
-  m_1,
-  newdata = grid_all_years,
-  re_form = NA
+#Indice d'abondance
+
+grid_small <- grid_with_id %>%
+  slice(seq(1, n(), by = 5))
+grid_yrs <- tidyr::crossing(
+  grid_small,
+  Year = unique(dat_pos$Year),
+  Month = unique(dat_pos$Month)
 )
 
-grid_all_years$effet_fixe <- pred_fix$est
-unique(grid_all_years$effet_fixe)
-
-
-#Effet année
-pred_fix <- predict(
-  m_spatemp,
-  newdata = grid_all_years,
-  re_form = NA
+p_st <- predict(m_1, newdata = grid_yrs, 
+                return_tmb_object = TRUE)
+index <- get_index(
+  p_st,
+  area = rep(4 * 5, nrow(grid_yrs))
 )
-
-grid_all_years$effet_annee <- pred_fix$est
-
-year_effect <- grid_all_years %>%
-  group_by(Year) %>%
-  summarise(effet = mean(effet_annee))
-
-Effet_An <- ggplot(year_effect, aes(Year, effet)) +
-  geom_line() +
-  geom_point() +
-  theme_minimal()
-
+Abundance_Index <- ggplot(index, aes(Year, est)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  labs(x = "Year", y = "Biomasse (nombre d'individus)") +
+  theme_bw()
 
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "Effet_annuel_m_1.png"),
-    plot     = Effet_An,
+    filename = file.path("data/", output_plot, "Indice_abondance_m_1.png"),
+    plot     = Abundance_Index,
     width    = 8,
     height   = 6,
     dpi      = 300
   )
 }
+
+
+#Visualisation des effets
+# Effet marginal de Year, Month marginalisé
+# prédiction
+Year_effect <- ggpredict(m_1, terms = "Year [all]")
+
+# créer un objet ggplot
+Year_plot <- plot(Year_effect) + theme_bw()
+
+# afficher
+Year_plot
+
+# sauvegarder
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_annuel_m_1.png"),
+    plot     = Year_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+Month_effect <- ggpredict(
+  m_1,
+  terms = c("Month [all]", "Year [all]")
+)
+
+Month_effect_smooth <- Month_effect %>%
+  group_by(x) %>%
+  summarise(
+    predicted = mean(predicted),
+    conf.low = mean(conf.low),
+    conf.high = mean(conf.high)
+  )
+
+Month_plot <- ggplot(Month_effect_smooth, aes(x = x, y = predicted)) +
+  geom_line(colour = "black", size = 1) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(x = "Month", y = "Effet marginal du mois") +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_mensuel_m_1.png"),
+    plot     = Month_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
 
 
 
