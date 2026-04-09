@@ -1303,7 +1303,11 @@ if (SavePlots) {
 
 grid_small <- grid_with_id %>%
   slice(seq(1, n(), by = 5))
-grid_yrs <- replicate_df(grid_small, "Year", unique(dat_pos$Year))
+grid_yrs <- tidyr::crossing(
+  grid_small,
+  Year = unique(dat_pos$Year),
+  Month = unique(dat_pos$Month)
+)
 
 p_st <- predict(m_1, newdata = grid_yrs, 
                 return_tmb_object = TRUE)
@@ -1379,6 +1383,11 @@ if (SavePlots) {
     dpi      = 300
   )
 }
+
+
+
+
+
 
 
 
