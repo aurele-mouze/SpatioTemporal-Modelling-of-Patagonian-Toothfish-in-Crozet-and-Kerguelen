@@ -1004,6 +1004,20 @@ if (SavePlots) {
 }
 
 
+grid_small <- grid_with_id %>%
+  slice(seq(1, n(), by = 5))
+grid_yrs <- replicate_df(grid_small, "Year", unique(dat_pos$Year))
+
+p_st <- predict(m_0, newdata = grid_yrs, 
+                return_tmb_object = TRUE)
+index <- get_index(
+  p_st,
+  area = rep(4 * 5, nrow(grid_yrs))
+)
+ggplot(index, aes(year, est)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
+  geom_line(lwd = 1, colour = "grey30") +
+  labs(x = "Year", y = "Biomasse (nombre d'individus)")
 
 
 
