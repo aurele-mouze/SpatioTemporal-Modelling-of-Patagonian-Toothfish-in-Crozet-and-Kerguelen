@@ -163,47 +163,47 @@ cat("→ mesh.png sauvegardé\n\n")
 
 
 
-# Estimation du modèle GAMMA simple, sans effets
-m_null <- sdmTMB(
-  ScanNumber ~ 1,
-  data = dat_pos,
-  mesh = bspde_pos,
-  family = Gamma(link = "log"),
-  spatial = "off",
-  spatiotemporal = "off"
-)
-
-m_spatial <- sdmTMB(
-  ScanNumber ~ 1,
-  data = dat_pos,
-  mesh = bspde_pos,
-  family = Gamma(link = "log"),
-  spatial = "on",
-  spatiotemporal = "off"
-)
-
-
-m_spatemp <- sdmTMB(
-  ScanNumber ~ 1,
-  data = dat_pos,
-  mesh = bspde_pos,
-  family = Gamma(link = "log"),
-  spatial = "on",
-  time= "Year",
-  spatiotemporal = "iid"
-)
-
-
-
-m_0 <- sdmTMB(
-  ScanNumber ~ s(Year),
-  data = dat_pos,
-  mesh = bspde_pos,
-  family = Gamma(link = "log"),
-  spatial = "on",
-  time= "Year",
-  spatiotemporal = "iid"
-)
+# # Estimation du modèle GAMMA simple, sans effets
+# m_null <- sdmTMB(
+#   ScanNumber ~ 1,
+#   data = dat_pos,
+#   mesh = bspde_pos,
+#   family = Gamma(link = "log"),
+#   spatial = "off",
+#   spatiotemporal = "off"
+# )
+# 
+# m_spatial <- sdmTMB(
+#   ScanNumber ~ 1,
+#   data = dat_pos,
+#   mesh = bspde_pos,
+#   family = Gamma(link = "log"),
+#   spatial = "on",
+#   spatiotemporal = "off"
+# )
+# 
+# 
+# m_spatemp <- sdmTMB(
+#   ScanNumber ~ 1,
+#   data = dat_pos,
+#   mesh = bspde_pos,
+#   family = Gamma(link = "log"),
+#   spatial = "on",
+#   time= "Year",
+#   spatiotemporal = "iid"
+# )
+# 
+# 
+# 
+# m_0 <- sdmTMB(
+#   ScanNumber ~ s(Year),
+#   data = dat_pos,
+#   mesh = bspde_pos,
+#   family = Gamma(link = "log"),
+#   spatial = "on",
+#   time= "Year",
+#   spatiotemporal = "iid"
+# )
 
 
 
@@ -218,177 +218,177 @@ m_1 <- sdmTMB(
 )
 
 
-#5. Contrôle des modèles ---------------------------------
-
-sanity(m_null)
-sanity(m_spatial)
-sanity(m_spatemp)
-
-dat_pos$resids <- residuals(m_null)
-hist_residual <- ggplot(dat_pos, aes(x = resids)) +
-  geom_histogram(
-    bins = 30,
-    fill = "steelblue",
-    color = "black",
-    alpha = 0.7
-  ) +
-  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
-  theme_bw()
-
-s <- simulate(m_null, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_null, test_uniformity = TRUE)
-
-QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
-  geom_point(alpha = 0.4) +
-  geom_abline(slope = 1, intercept = 0) +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "residual-histogramme-m-null.png"),
-    plot     = hist_residual,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "qqplot_residual-m-null.png"),
-    plot     = QQplot,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-dat_pos$resids <- residuals(m_spatial)
-hist_residual <- ggplot(dat_pos, aes(x = resids)) +
-  geom_histogram(
-    bins = 30,
-    fill = "steelblue",
-    color = "black",
-    alpha = 0.7
-  ) +
-  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
-  theme_bw()
-
-s <- simulate(m_spatial, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_spatial, test_uniformity = TRUE)
-
-QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
-  geom_point(alpha = 0.4) +
-  geom_abline(slope = 1, intercept = 0) +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "residual-histogramme-spatial.png"),
-    plot     = hist_residual,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "qqplot_residual-spatial.png"),
-    plot     = QQplot,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-
-
-dat_pos$resids <- residuals(m_spatemp)
-hist_residual <- ggplot(dat_pos, aes(x = resids)) +
-  geom_histogram(
-    bins = 30,
-    fill = "steelblue",
-    color = "black",
-    alpha = 0.7
-  ) +
-  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
-  theme_bw()
-
-s <- simulate(m_spatemp, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_spatemp, test_uniformity = TRUE)
-
-QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
-  geom_point(alpha = 0.4) +
-  geom_abline(slope = 1, intercept = 0) +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "residual-histogramme-m-spatemp.png"),
-    plot     = hist_residual,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "qqplot_residual-m-spatemp.png"),
-    plot     = QQplot,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-
-
-
-
-dat_pos$resids <- residuals(m_0)
-hist_residual <- ggplot(dat_pos, aes(x = resids)) +
-  geom_histogram(
-    bins = 30,
-    fill = "steelblue",
-    color = "black",
-    alpha = 0.7
-  ) +
-  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
-  theme_bw()
-
-s <- simulate(m_0, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_0, test_uniformity = TRUE)
-
-QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
-  geom_point(alpha = 0.4) +
-  geom_abline(slope = 1, intercept = 0) +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "residual-histogramme-m-0.png"),
-    plot     = hist_residual,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "qqplot_residual-m-0.png"),
-    plot     = QQplot,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
+# #5. Contrôle des modèles ---------------------------------
+# 
+# sanity(m_null)
+# sanity(m_spatial)
+# sanity(m_spatemp)
+# 
+# dat_pos$resids <- residuals(m_null)
+# hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+#   geom_histogram(
+#     bins = 30,
+#     fill = "steelblue",
+#     color = "black",
+#     alpha = 0.7
+#   ) +
+#   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+#   theme_bw()
+# 
+# s <- simulate(m_null, nsim = number_sim, type = "mle-mvn")
+# dharma_qqplot = dharma_residuals(s, m_null, test_uniformity = TRUE)
+# 
+# QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+#   geom_point(alpha = 0.4) +
+#   geom_abline(slope = 1, intercept = 0) +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "residual-histogramme-m-null.png"),
+#     plot     = hist_residual,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "qqplot_residual-m-null.png"),
+#     plot     = QQplot,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# dat_pos$resids <- residuals(m_spatial)
+# hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+#   geom_histogram(
+#     bins = 30,
+#     fill = "steelblue",
+#     color = "black",
+#     alpha = 0.7
+#   ) +
+#   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+#   theme_bw()
+# 
+# s <- simulate(m_spatial, nsim = number_sim, type = "mle-mvn")
+# dharma_qqplot = dharma_residuals(s, m_spatial, test_uniformity = TRUE)
+# 
+# QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+#   geom_point(alpha = 0.4) +
+#   geom_abline(slope = 1, intercept = 0) +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "residual-histogramme-spatial.png"),
+#     plot     = hist_residual,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "qqplot_residual-spatial.png"),
+#     plot     = QQplot,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# 
+# 
+# dat_pos$resids <- residuals(m_spatemp)
+# hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+#   geom_histogram(
+#     bins = 30,
+#     fill = "steelblue",
+#     color = "black",
+#     alpha = 0.7
+#   ) +
+#   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+#   theme_bw()
+# 
+# s <- simulate(m_spatemp, nsim = number_sim, type = "mle-mvn")
+# dharma_qqplot = dharma_residuals(s, m_spatemp, test_uniformity = TRUE)
+# 
+# QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+#   geom_point(alpha = 0.4) +
+#   geom_abline(slope = 1, intercept = 0) +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "residual-histogramme-m-spatemp.png"),
+#     plot     = hist_residual,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "qqplot_residual-m-spatemp.png"),
+#     plot     = QQplot,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# 
+# 
+# 
+# 
+# dat_pos$resids <- residuals(m_0)
+# hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+#   geom_histogram(
+#     bins = 30,
+#     fill = "steelblue",
+#     color = "black",
+#     alpha = 0.7
+#   ) +
+#   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+#   theme_bw()
+# 
+# s <- simulate(m_0, nsim = number_sim, type = "mle-mvn")
+# dharma_qqplot = dharma_residuals(s, m_0, test_uniformity = TRUE)
+# 
+# QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+#   geom_point(alpha = 0.4) +
+#   geom_abline(slope = 1, intercept = 0) +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "residual-histogramme-m-0.png"),
+#     plot     = hist_residual,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "qqplot_residual-m-0.png"),
+#     plot     = QQplot,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
 
 
 
@@ -420,596 +420,596 @@ grid <- Extrapol_grid %>%
   dplyr::select(depth_scaled, slope_scaled, slope, depth, nb_ham, tps_h, X, Y) %>%
   rename(prof_bathy = depth)
 
-#7. Prédictions -----------------------------------
-# Vérifications rapides
-stopifnot("Year" %in% names(dat_pos))
-stopifnot(is.numeric(dat_pos$Year))
-
-#Préparer grid avec un identifiant de cellule
-grid_with_id <- grid %>%
-  mutate(cell_id = row_number())
-
-#Réplication temporelle : une ligne par cellule × année
-years <- sort(unique(dat_pos$Year))
-grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
-  relocate(cell_id)
-
-#Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
-missing_cols <- setdiff(required_cols, names(grid_all_years))
-if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
-
-# Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_null, grid_all_years, chunk_size = 20000)
-
-# Rattacher cell_id et transformer sur l'échelle réponse
-pred_grid <- pred_grid_raw %>%
-  mutate(cell_id = grid_all_years$cell_id,
-         ScanNumber_pred = est) %>%
-  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
-
-histo <- ggplot(pred_grid, aes(x = "", y = exp(ScanNumber_pred))) +
-  geom_boxplot(fill = "lightgreen", outlier.color = "red") +
-  labs(
-    x = "",
-    y = "Abondance prédite",
-    title = "Boxplot des Abondance prédites par le modèle null"
-  ) +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "mean_histo_null.png"),
-    plot     = histo,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-
-
-
-
-
-
-stopifnot("Year" %in% names(dat_pos))
-stopifnot(is.numeric(dat_pos$Year))
-
-#Préparer grid avec un identifiant de cellule
-grid_with_id <- grid %>%
-  mutate(cell_id = row_number())
-
-#Réplication temporelle : une ligne par cellule × année
-years <- sort(unique(dat_pos$Year))
-grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
-  relocate(cell_id)
-
-#Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
-missing_cols <- setdiff(required_cols, names(grid_all_years))
-if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
-
-# Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_spatial, grid_all_years, chunk_size = 20000)
-
-# Rattacher cell_id et transformer sur l'échelle réponse
-pred_grid <- pred_grid_raw %>%
-  mutate(cell_id = grid_all_years$cell_id,
-         ScanNumber_pred = est) %>%
-  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
-
-# Moyenne temporelle par cellule spatiale
-pred_mean_cell <- pred_grid %>%
-  group_by(cell_id, X, Y, prof_bathy) %>%
-  summarise(ScanNumber_mean = mean(ScanNumber_pred, na.rm = TRUE), .groups = "drop")
-
-#  Carte moyenne -> sortie tout effets confondus
-mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(ScanNumber_mean))) +
-  geom_raster() +
-  scale_fill_viridis_c(option = "viridis", name = "Abondance moyenne") +
-  coord_equal() +
-  labs(title = "log Abondance moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "mean_map_spatial.png"),
-    plot     = mean_map,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-
-
-
-
-
-# Vérifications rapides
-stopifnot("Year" %in% names(dat_pos))
-stopifnot(is.numeric(dat_pos$Year))
-
-#Préparer grid avec un identifiant de cellule
-grid_with_id <- grid %>%
-  mutate(cell_id = row_number())
-
-grid_with_id <- dplyr::as_tibble(grid_with_id)
-
-#Réplication temporelle : une ligne par cellule × année
-years <- sort(unique(dat_pos$Year))
-grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
-  relocate(cell_id)
-
-#Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
-missing_cols <- setdiff(required_cols, names(grid_all_years))
-if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
-
-# Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_spatemp, grid_all_years, chunk_size = 20000)
-
-
-
-# Rattacher cell_id et transformer sur l'échelle réponse
-pred_grid <- pred_grid_raw %>%
-  mutate(cell_id = grid_all_years$cell_id,
-         ScanNumber_pred = est) %>%
-  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
-
-# Moyenne temporelle par cellule spatiale
-pred_mean_cell <- pred_grid %>%
-  group_by(cell_id, X, Y, prof_bathy) %>%
-  summarise(ScanNumber_mean = mean(ScanNumber_pred, na.rm = TRUE), .groups = "drop")
-
-#  Carte moyenne -> sortie tout effets confondus
-mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(ScanNumber_mean))) +
-  geom_raster() +
-  scale_fill_viridis_c(option = "viridis", name = "Abondance moyenne") +
-  coord_equal() +
-  labs(title = "log Abondance moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "mean_map_spatiotemp.png"),
-    plot     = mean_map,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-annees <- sort(unique(dat_pos$Year))
-
-liste_cartes <- list()
-
-
-for (an in annees) {
-  # filtrer l'année
-  pred_year <- pred_grid %>%
-    filter(Year == an)
-  
-  # carte année courante
-  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(ScanNumber_pred))) +
-    geom_tile() +
-    scale_fill_viridis_c(option = "viridis", name = "Abondance prédite") +
-    coord_equal() +
-    labs(
-      title = paste("Aboncance prédite - année", an),
-      x = "X (km)",
-      y = "Y (km)"
-    ) +
-    theme_minimal()
-  
-  if (SavePlots) {
-    ggsave(
-      filename = file.path("data/", output_plot, paste0("map_Abondance_pred_", an, ".png")),
-      plot = carte,
-      width = 8,
-      height = 6,
-      dpi = 300
-    )}
-}
-
-
-# Effet spatial
-grid_spatial <- grid %>%
-  mutate(Year = 2015)
-pred_spatial <- predict(m_spatemp, newdata = grid_spatial)
-
-grid_spatial$effet_spatial <- pred_spatial$omega_s
-
-lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
-
-Spat_effect <- ggplot() +
-  
-  # fond gris sur toute l'emprise
-  annotate(
-    "rect",
-    xmin = min(grid_spatial$X),
-    xmax = max(grid_spatial$X),
-    ymin = min(grid_spatial$Y),
-    ymax = max(grid_spatial$Y),
-    fill = "grey80",
-    alpha = 0.4
-  ) +
-  
-  # raster prédit
-  geom_raster(
-    data = grid_spatial,
-    aes(X, Y, fill = effet_spatial)
-  ) +
-  
-  scale_fill_gradient2(
-    low = "blue",
-    mid = "white",
-    high = "red",
-    midpoint = 0,
-    limits = c(-lim, lim),
-    name = "Effet spatial"
-  ) +
-  
-  coord_equal() +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "Effet_spatial.png"),
-    plot     = Spat_effect,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-# Effet Spatio-temporel
-
-pred_spatiotemp <- predict(m_spatemp, newdata = grid_all_years)
-
-grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
-
-
-annees <- sort(unique(grid_all_years$Year))
-
-liste_cartes_spatiotemp <- list()
-
-lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
-
-for (an in annees) {
-  
-  pred_year <- grid_all_years %>%
-    filter(Year == an)
-  
-  carte <- ggplot() +
-    
-    annotate(
-      "rect",
-      xmin = min(grid_all_years$X),
-      xmax = max(grid_all_years$X),
-      ymin = min(grid_all_years$Y),
-      ymax = max(grid_all_years$Y),
-      fill = "grey90",
-      alpha = 0.4
-    ) +
-    
-    geom_raster(
-      data = pred_year,
-      aes(X, Y, fill = effet_spatiotemp)
-    ) +
-    
-    scale_fill_gradient2(
-      low = "blue",
-      mid = "white",
-      high = "red",
-      midpoint = 0,
-      limits = c(-lim, lim),
-      name = "Effet spatio-temporel"
-    ) +
-    
-    coord_equal() +
-    
-    labs(
-      title = paste("Effet spatio-temporel - année", an),
-      x = "X (km)",
-      y = "Y (km)"
-    ) +
-    
-    theme_minimal()
-  
-  if (SavePlots) {
-    ggsave(
-      filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_", an, ".png")),
-      plot = carte,
-      width = 8,
-      height = 6,
-      dpi = 300
-    )}
-}
-
-
-pred_fix <- predict(
-  m_spatemp,
-  newdata = grid_all_years,
-  re_form = NA
-)
-
-grid_all_years$effet_fixe <- pred_fix$est
-unique(grid_all_years$effet_fixe)
-
-
-
-
-
-
-
-
-
-
-
-#m_0
-
-# Vérifications rapides
-stopifnot("Year" %in% names(dat_pos))
-stopifnot(is.numeric(dat_pos$Year))
-
-#Préparer grid avec un identifiant de cellule
-grid_with_id <- grid %>%
-  mutate(cell_id = row_number())
-
-grid_with_id <- dplyr::as_tibble(grid_with_id)
-
-#Réplication temporelle : une ligne par cellule × année
-years <- sort(unique(dat_pos$Year))
-grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
-  relocate(cell_id)
-
-#Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
-missing_cols <- setdiff(required_cols, names(grid_all_years))
-if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
-
-# Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_0, grid_all_years, chunk_size = 20000)
-
-
-
-# Rattacher cell_id et transformer sur l'échelle réponse
-pred_grid <- pred_grid_raw %>%
-  mutate(cell_id = grid_all_years$cell_id,
-         ScanNumber_pred = est) %>%
-  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
-
-# Moyenne temporelle par cellule spatiale
-pred_mean_cell <- pred_grid %>%
-  group_by(cell_id, X, Y, prof_bathy) %>%
-  summarise(ScanNumber_mean = mean(ScanNumber_pred, na.rm = TRUE), .groups = "drop")
-
-#  Carte moyenne -> sortie tout effets confondus
-mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(ScanNumber_mean))) +
-  geom_raster() +
-  scale_fill_viridis_c(option = "viridis", name = "Abondance moyenne") +
-  coord_equal() +
-  labs(title = "Abondance moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "mean_map_m_0.png"),
-    plot     = mean_map,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-annees <- sort(unique(dat_pos$Year))
-
-liste_cartes <- list()
-
-
-for (an in annees) {
-  # filtrer l'année
-  pred_year <- pred_grid %>%
-    filter(Year == an)
-  
-  # carte année courante
-  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(ScanNumber_pred))) +
-    geom_tile() +
-    scale_fill_viridis_c(option = "viridis", name = "Abondance prédite") +
-    coord_equal() +
-    labs(
-      title = paste("Abondance prédite - année", an),
-      x = "X (km)",
-      y = "Y (km)"
-    ) +
-    theme_minimal()
-  
-  if (SavePlots) {
-    ggsave(
-      filename = file.path("data/", output_plot, paste0("map_Abondance_pred_m_0_", an, ".png")),
-      plot = carte,
-      width = 8,
-      height = 6,
-      dpi = 300
-    )}
-}
-
-
-# Effet spatial
-grid_spatial <- grid %>%
-  mutate(Year = 2015)
-pred_spatial <- predict(m_0, newdata = grid_spatial)
-
-grid_spatial$effet_spatial <- pred_spatial$omega_s
-
-lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
-
-Spat_effect <- ggplot() +
-  
-  # fond gris sur toute l'emprise
-  annotate(
-    "rect",
-    xmin = min(grid_spatial$X),
-    xmax = max(grid_spatial$X),
-    ymin = min(grid_spatial$Y),
-    ymax = max(grid_spatial$Y),
-    fill = "grey80",
-    alpha = 0.4
-  ) +
-  
-  # raster prédit
-  geom_raster(
-    data = grid_spatial,
-    aes(X, Y, fill = effet_spatial)
-  ) +
-  
-  scale_fill_gradient2(
-    low = "blue",
-    mid = "white",
-    high = "red",
-    midpoint = 0,
-    limits = c(-lim, lim),
-    name = "Effet spatial"
-  ) +
-  
-  coord_equal() +
-  theme_minimal()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "Effet_spatial_m_0.png"),
-    plot     = Spat_effect,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-# Effet Spatio-temporel
-
-pred_spatiotemp <- predict(m_0, newdata = grid_all_years)
-
-grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
-
-
-annees <- sort(unique(grid_all_years$Year))
-
-liste_cartes_spatiotemp <- list()
-
-lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
-
-for (an in annees) {
-  
-  pred_year <- grid_all_years %>%
-    filter(Year == an)
-  
-  carte <- ggplot() +
-    
-    annotate(
-      "rect",
-      xmin = min(grid_all_years$X),
-      xmax = max(grid_all_years$X),
-      ymin = min(grid_all_years$Y),
-      ymax = max(grid_all_years$Y),
-      fill = "grey90",
-      alpha = 0.4
-    ) +
-    
-    geom_raster(
-      data = pred_year,
-      aes(X, Y, fill = effet_spatiotemp)
-    ) +
-    
-    scale_fill_gradient2(
-      low = "blue",
-      mid = "white",
-      high = "red",
-      midpoint = 0,
-      limits = c(-lim, lim),
-      name = "Effet spatio-temporel"
-    ) +
-    
-    coord_equal() +
-    
-    labs(
-      title = paste("Effet spatio-temporel - année", an),
-      x = "X (km)",
-      y = "Y (km)"
-    ) +
-    
-    theme_minimal()
-  
-  if (SavePlots) {
-    ggsave(
-      filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_m_0_", an, ".png")),
-      plot = carte,
-      width = 8,
-      height = 6,
-      dpi = 300
-    )}
-}
-
-
-#Indice d'abondance
-
-grid_small <- grid_with_id %>%
-  slice(seq(1, n(), by = 5))
-grid_yrs <- replicate_df(grid_small, "Year", unique(dat_pos$Year))
-
-p_st <- predict(m_0, newdata = grid_yrs, 
-                return_tmb_object = TRUE)
-index <- get_index(
-  p_st,
-  area = rep(4 * 5, nrow(grid_yrs))
-)
-Abundance_Index <- ggplot(index, aes(Year, est)) +
-  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
-  geom_line(linewidth = 1, colour = "grey30") +
-  labs(x = "Year", y = "Biomasse (nombre d'individus)") +
-  theme_bw()
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "Indice_abondance_m_0.png"),
-    plot     = Abundance_Index,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
-#Visualisation des effets
-Year_effect <- ggeffects::ggpredict(m_0, "Year [all]") |> plot()
-
-
-if (SavePlots) {
-  ggsave(
-    filename = file.path("data/", output_plot, "Effet_annuel_m_0.png"),
-    plot     = Year_effect,
-    width    = 8,
-    height   = 6,
-    dpi      = 300
-  )
-}
-
-
+# #7. Prédictions -----------------------------------
+# # Vérifications rapides
+# stopifnot("Year" %in% names(dat_pos))
+# stopifnot(is.numeric(dat_pos$Year))
+# 
+# #Préparer grid avec un identifiant de cellule
+# grid_with_id <- grid %>%
+#   mutate(cell_id = row_number())
+# 
+# #Réplication temporelle : une ligne par cellule × année
+# years <- sort(unique(dat_pos$Year))
+# grid_all_years <- grid_with_id %>%
+#   tidyr::uncount(length(years)) %>%
+#   mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+#   relocate(cell_id)
+# 
+# #Vérifier colonnes requises
+# required_cols <- c("prof_bathy", "Year", "X", "Y")
+# missing_cols <- setdiff(required_cols, names(grid_all_years))
+# if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+# 
+# # Prédiction (utilise chunking si nécessaire)
+# pred_grid_raw <- predict_in_chunks(m_null, grid_all_years, chunk_size = 20000)
+# 
+# # Rattacher cell_id et transformer sur l'échelle réponse
+# pred_grid <- pred_grid_raw %>%
+#   mutate(cell_id = grid_all_years$cell_id,
+#          ScanNumber_pred = est) %>%
+#   left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+# 
+# histo <- ggplot(pred_grid, aes(x = "", y = exp(ScanNumber_pred))) +
+#   geom_boxplot(fill = "lightgreen", outlier.color = "red") +
+#   labs(
+#     x = "",
+#     y = "Abondance prédite",
+#     title = "Boxplot des Abondance prédites par le modèle null"
+#   ) +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "mean_histo_null.png"),
+#     plot     = histo,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# stopifnot("Year" %in% names(dat_pos))
+# stopifnot(is.numeric(dat_pos$Year))
+# 
+# #Préparer grid avec un identifiant de cellule
+# grid_with_id <- grid %>%
+#   mutate(cell_id = row_number())
+# 
+# #Réplication temporelle : une ligne par cellule × année
+# years <- sort(unique(dat_pos$Year))
+# grid_all_years <- grid_with_id %>%
+#   tidyr::uncount(length(years)) %>%
+#   mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+#   relocate(cell_id)
+# 
+# #Vérifier colonnes requises
+# required_cols <- c("prof_bathy", "Year", "X", "Y")
+# missing_cols <- setdiff(required_cols, names(grid_all_years))
+# if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+# 
+# # Prédiction (utilise chunking si nécessaire)
+# pred_grid_raw <- predict_in_chunks(m_spatial, grid_all_years, chunk_size = 20000)
+# 
+# # Rattacher cell_id et transformer sur l'échelle réponse
+# pred_grid <- pred_grid_raw %>%
+#   mutate(cell_id = grid_all_years$cell_id,
+#          ScanNumber_pred = est) %>%
+#   left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+# 
+# # Moyenne temporelle par cellule spatiale
+# pred_mean_cell <- pred_grid %>%
+#   group_by(cell_id, X, Y, prof_bathy) %>%
+#   summarise(ScanNumber_mean = mean(ScanNumber_pred, na.rm = TRUE), .groups = "drop")
+# 
+# #  Carte moyenne -> sortie tout effets confondus
+# mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(ScanNumber_mean))) +
+#   geom_raster() +
+#   scale_fill_viridis_c(option = "viridis", name = "Abondance moyenne") +
+#   coord_equal() +
+#   labs(title = "log Abondance moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "mean_map_spatial.png"),
+#     plot     = mean_map,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# # Vérifications rapides
+# stopifnot("Year" %in% names(dat_pos))
+# stopifnot(is.numeric(dat_pos$Year))
+# 
+# #Préparer grid avec un identifiant de cellule
+# grid_with_id <- grid %>%
+#   mutate(cell_id = row_number())
+# 
+# grid_with_id <- dplyr::as_tibble(grid_with_id)
+# 
+# #Réplication temporelle : une ligne par cellule × année
+# years <- sort(unique(dat_pos$Year))
+# grid_all_years <- grid_with_id %>%
+#   tidyr::uncount(length(years)) %>%
+#   mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+#   relocate(cell_id)
+# 
+# #Vérifier colonnes requises
+# required_cols <- c("prof_bathy", "Year", "X", "Y")
+# missing_cols <- setdiff(required_cols, names(grid_all_years))
+# if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+# 
+# # Prédiction (utilise chunking si nécessaire)
+# pred_grid_raw <- predict_in_chunks(m_spatemp, grid_all_years, chunk_size = 20000)
+# 
+# 
+# 
+# # Rattacher cell_id et transformer sur l'échelle réponse
+# pred_grid <- pred_grid_raw %>%
+#   mutate(cell_id = grid_all_years$cell_id,
+#          ScanNumber_pred = est) %>%
+#   left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+# 
+# # Moyenne temporelle par cellule spatiale
+# pred_mean_cell <- pred_grid %>%
+#   group_by(cell_id, X, Y, prof_bathy) %>%
+#   summarise(ScanNumber_mean = mean(ScanNumber_pred, na.rm = TRUE), .groups = "drop")
+# 
+# #  Carte moyenne -> sortie tout effets confondus
+# mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(ScanNumber_mean))) +
+#   geom_raster() +
+#   scale_fill_viridis_c(option = "viridis", name = "Abondance moyenne") +
+#   coord_equal() +
+#   labs(title = "log Abondance moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "mean_map_spatiotemp.png"),
+#     plot     = mean_map,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# annees <- sort(unique(dat_pos$Year))
+# 
+# liste_cartes <- list()
+# 
+# 
+# for (an in annees) {
+#   # filtrer l'année
+#   pred_year <- pred_grid %>%
+#     filter(Year == an)
+#   
+#   # carte année courante
+#   carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(ScanNumber_pred))) +
+#     geom_tile() +
+#     scale_fill_viridis_c(option = "viridis", name = "Abondance prédite") +
+#     coord_equal() +
+#     labs(
+#       title = paste("Aboncance prédite - année", an),
+#       x = "X (km)",
+#       y = "Y (km)"
+#     ) +
+#     theme_minimal()
+#   
+#   if (SavePlots) {
+#     ggsave(
+#       filename = file.path("data/", output_plot, paste0("map_Abondance_pred_", an, ".png")),
+#       plot = carte,
+#       width = 8,
+#       height = 6,
+#       dpi = 300
+#     )}
+# }
+# 
+# 
+# # Effet spatial
+# grid_spatial <- grid %>%
+#   mutate(Year = 2015)
+# pred_spatial <- predict(m_spatemp, newdata = grid_spatial)
+# 
+# grid_spatial$effet_spatial <- pred_spatial$omega_s
+# 
+# lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
+# 
+# Spat_effect <- ggplot() +
+#   
+#   # fond gris sur toute l'emprise
+#   annotate(
+#     "rect",
+#     xmin = min(grid_spatial$X),
+#     xmax = max(grid_spatial$X),
+#     ymin = min(grid_spatial$Y),
+#     ymax = max(grid_spatial$Y),
+#     fill = "grey80",
+#     alpha = 0.4
+#   ) +
+#   
+#   # raster prédit
+#   geom_raster(
+#     data = grid_spatial,
+#     aes(X, Y, fill = effet_spatial)
+#   ) +
+#   
+#   scale_fill_gradient2(
+#     low = "blue",
+#     mid = "white",
+#     high = "red",
+#     midpoint = 0,
+#     limits = c(-lim, lim),
+#     name = "Effet spatial"
+#   ) +
+#   
+#   coord_equal() +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "Effet_spatial.png"),
+#     plot     = Spat_effect,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# # Effet Spatio-temporel
+# 
+# pred_spatiotemp <- predict(m_spatemp, newdata = grid_all_years)
+# 
+# grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
+# 
+# 
+# annees <- sort(unique(grid_all_years$Year))
+# 
+# liste_cartes_spatiotemp <- list()
+# 
+# lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
+# 
+# for (an in annees) {
+#   
+#   pred_year <- grid_all_years %>%
+#     filter(Year == an)
+#   
+#   carte <- ggplot() +
+#     
+#     annotate(
+#       "rect",
+#       xmin = min(grid_all_years$X),
+#       xmax = max(grid_all_years$X),
+#       ymin = min(grid_all_years$Y),
+#       ymax = max(grid_all_years$Y),
+#       fill = "grey90",
+#       alpha = 0.4
+#     ) +
+#     
+#     geom_raster(
+#       data = pred_year,
+#       aes(X, Y, fill = effet_spatiotemp)
+#     ) +
+#     
+#     scale_fill_gradient2(
+#       low = "blue",
+#       mid = "white",
+#       high = "red",
+#       midpoint = 0,
+#       limits = c(-lim, lim),
+#       name = "Effet spatio-temporel"
+#     ) +
+#     
+#     coord_equal() +
+#     
+#     labs(
+#       title = paste("Effet spatio-temporel - année", an),
+#       x = "X (km)",
+#       y = "Y (km)"
+#     ) +
+#     
+#     theme_minimal()
+#   
+#   if (SavePlots) {
+#     ggsave(
+#       filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_", an, ".png")),
+#       plot = carte,
+#       width = 8,
+#       height = 6,
+#       dpi = 300
+#     )}
+# }
+# 
+# 
+# pred_fix <- predict(
+#   m_spatemp,
+#   newdata = grid_all_years,
+#   re_form = NA
+# )
+# 
+# grid_all_years$effet_fixe <- pred_fix$est
+# unique(grid_all_years$effet_fixe)
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# #m_0
+# 
+# # Vérifications rapides
+# stopifnot("Year" %in% names(dat_pos))
+# stopifnot(is.numeric(dat_pos$Year))
+# 
+# #Préparer grid avec un identifiant de cellule
+# grid_with_id <- grid %>%
+#   mutate(cell_id = row_number())
+# 
+# grid_with_id <- dplyr::as_tibble(grid_with_id)
+# 
+# #Réplication temporelle : une ligne par cellule × année
+# years <- sort(unique(dat_pos$Year))
+# grid_all_years <- grid_with_id %>%
+#   tidyr::uncount(length(years)) %>%
+#   mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+#   relocate(cell_id)
+# 
+# #Vérifier colonnes requises
+# required_cols <- c("prof_bathy", "Year", "X", "Y")
+# missing_cols <- setdiff(required_cols, names(grid_all_years))
+# if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+# 
+# # Prédiction (utilise chunking si nécessaire)
+# pred_grid_raw <- predict_in_chunks(m_0, grid_all_years, chunk_size = 20000)
+# 
+# 
+# 
+# # Rattacher cell_id et transformer sur l'échelle réponse
+# pred_grid <- pred_grid_raw %>%
+#   mutate(cell_id = grid_all_years$cell_id,
+#          ScanNumber_pred = est) %>%
+#   left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+# 
+# # Moyenne temporelle par cellule spatiale
+# pred_mean_cell <- pred_grid %>%
+#   group_by(cell_id, X, Y, prof_bathy) %>%
+#   summarise(ScanNumber_mean = mean(ScanNumber_pred, na.rm = TRUE), .groups = "drop")
+# 
+# #  Carte moyenne -> sortie tout effets confondus
+# mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(ScanNumber_mean))) +
+#   geom_raster() +
+#   scale_fill_viridis_c(option = "viridis", name = "Abondance moyenne") +
+#   coord_equal() +
+#   labs(title = "Abondance moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "mean_map_m_0.png"),
+#     plot     = mean_map,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# annees <- sort(unique(dat_pos$Year))
+# 
+# liste_cartes <- list()
+# 
+# 
+# for (an in annees) {
+#   # filtrer l'année
+#   pred_year <- pred_grid %>%
+#     filter(Year == an)
+#   
+#   # carte année courante
+#   carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(ScanNumber_pred))) +
+#     geom_tile() +
+#     scale_fill_viridis_c(option = "viridis", name = "Abondance prédite") +
+#     coord_equal() +
+#     labs(
+#       title = paste("Abondance prédite - année", an),
+#       x = "X (km)",
+#       y = "Y (km)"
+#     ) +
+#     theme_minimal()
+#   
+#   if (SavePlots) {
+#     ggsave(
+#       filename = file.path("data/", output_plot, paste0("map_Abondance_pred_m_0_", an, ".png")),
+#       plot = carte,
+#       width = 8,
+#       height = 6,
+#       dpi = 300
+#     )}
+# }
+# 
+# 
+# # Effet spatial
+# grid_spatial <- grid %>%
+#   mutate(Year = 2015)
+# pred_spatial <- predict(m_0, newdata = grid_spatial)
+# 
+# grid_spatial$effet_spatial <- pred_spatial$omega_s
+# 
+# lim <- max(abs(grid_spatial$effet_spatial), na.rm = TRUE)
+# 
+# Spat_effect <- ggplot() +
+#   
+#   # fond gris sur toute l'emprise
+#   annotate(
+#     "rect",
+#     xmin = min(grid_spatial$X),
+#     xmax = max(grid_spatial$X),
+#     ymin = min(grid_spatial$Y),
+#     ymax = max(grid_spatial$Y),
+#     fill = "grey80",
+#     alpha = 0.4
+#   ) +
+#   
+#   # raster prédit
+#   geom_raster(
+#     data = grid_spatial,
+#     aes(X, Y, fill = effet_spatial)
+#   ) +
+#   
+#   scale_fill_gradient2(
+#     low = "blue",
+#     mid = "white",
+#     high = "red",
+#     midpoint = 0,
+#     limits = c(-lim, lim),
+#     name = "Effet spatial"
+#   ) +
+#   
+#   coord_equal() +
+#   theme_minimal()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "Effet_spatial_m_0.png"),
+#     plot     = Spat_effect,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# # Effet Spatio-temporel
+# 
+# pred_spatiotemp <- predict(m_0, newdata = grid_all_years)
+# 
+# grid_all_years$effet_spatiotemp <- pred_spatiotemp$epsilon_st
+# 
+# 
+# annees <- sort(unique(grid_all_years$Year))
+# 
+# liste_cartes_spatiotemp <- list()
+# 
+# lim <- max(abs(grid_all_years$effet_spatiotemp), na.rm = TRUE)
+# 
+# for (an in annees) {
+#   
+#   pred_year <- grid_all_years %>%
+#     filter(Year == an)
+#   
+#   carte <- ggplot() +
+#     
+#     annotate(
+#       "rect",
+#       xmin = min(grid_all_years$X),
+#       xmax = max(grid_all_years$X),
+#       ymin = min(grid_all_years$Y),
+#       ymax = max(grid_all_years$Y),
+#       fill = "grey90",
+#       alpha = 0.4
+#     ) +
+#     
+#     geom_raster(
+#       data = pred_year,
+#       aes(X, Y, fill = effet_spatiotemp)
+#     ) +
+#     
+#     scale_fill_gradient2(
+#       low = "blue",
+#       mid = "white",
+#       high = "red",
+#       midpoint = 0,
+#       limits = c(-lim, lim),
+#       name = "Effet spatio-temporel"
+#     ) +
+#     
+#     coord_equal() +
+#     
+#     labs(
+#       title = paste("Effet spatio-temporel - année", an),
+#       x = "X (km)",
+#       y = "Y (km)"
+#     ) +
+#     
+#     theme_minimal()
+#   
+#   if (SavePlots) {
+#     ggsave(
+#       filename = file.path("data/", output_plot, paste0("map_Effet_Spatiotemp_m_0_", an, ".png")),
+#       plot = carte,
+#       width = 8,
+#       height = 6,
+#       dpi = 300
+#     )}
+# }
+# 
+# 
+# #Indice d'abondance
+# 
+# grid_small <- grid_with_id %>%
+#   slice(seq(1, n(), by = 5))
+# grid_yrs <- replicate_df(grid_small, "Year", unique(dat_pos$Year))
+# 
+# p_st <- predict(m_0, newdata = grid_yrs, 
+#                 return_tmb_object = TRUE)
+# index <- get_index(
+#   p_st,
+#   area = rep(4 * 5, nrow(grid_yrs))
+# )
+# Abundance_Index <- ggplot(index, aes(Year, est)) +
+#   geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
+#   geom_line(linewidth = 1, colour = "grey30") +
+#   labs(x = "Year", y = "Biomasse (nombre d'individus)") +
+#   theme_bw()
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "Indice_abondance_m_0.png"),
+#     plot     = Abundance_Index,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
+# #Visualisation des effets
+# Year_effect <- ggeffects::ggpredict(m_0, "Year [all]") |> plot()
+# 
+# 
+# if (SavePlots) {
+#   ggsave(
+#     filename = file.path("data/", output_plot, "Effet_annuel_m_0.png"),
+#     plot     = Year_effect,
+#     width    = 8,
+#     height   = 6,
+#     dpi      = 300
+#   )
+# }
+# 
+# 
 
 
 
