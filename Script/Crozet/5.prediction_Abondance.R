@@ -187,27 +187,47 @@ cat("→ mesh.png sauvegardé\n\n")
 # )
 # 
 # 
-# m_spatemp <- sdmTMB(
-#   ScanNumber ~ 1,
-#   data = dat_pos,
-#   mesh = bspde_pos,
-#   family = Gamma(link = "log"),
-#   spatial = "on",
-#   time= "Year",
-#   spatiotemporal = "iid"
-# )
-# 
-# 
-# 
-# m_0 <- sdmTMB(
-#   ScanNumber ~ s(Year),
-#   data = dat_pos,
-#   mesh = bspde_pos,
-#   family = Gamma(link = "log"),
-#   spatial = "on",
-#   time= "Year",
-#   spatiotemporal = "iid"
-# )
+m_spatemp <- sdmTMB(
+  ScanNumber ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
+
+
+
+m_0 <- sdmTMB(
+  ScanNumber ~ s(Year),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
+
+m_01 <- sdmTMB(
+  ScanNumber ~ s(Year) + s(nb_ham_std),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
+
+m_02 <- sdmTMB(
+  ScanNumber ~ s(Year) + s(trempe_std),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
 
 
 m_1 <- sdmTMB(
@@ -221,6 +241,36 @@ m_1 <- sdmTMB(
 )
 
 
+ll_1 <- as.numeric(logLik(m_1))
+ll_01 <- as.numeric(logLik(m_01))
+ll_02 <- as.numeric(logLik(m_02))
+ll_0 <- as.numeric(logLik(m_0))
+ll_spat <- as.numeric(logLik(m_spatemp))
+
+delta_x1 <- 2 * (ll_1 - ll_01)
+
+delta_x12 <- 2 * (ll_1 - ll_02)
+
+delta_x2 <- 2 * (ll_1 - ll_0)
+
+delta_nb_ham_cond <- 2 * (ll_1 - ll_02)
+cor(dat_pos$nb_ham_std, dat_pos$trempe_std)
+
+
+
+dat_pos$ham_class <- cut(
+  dat_pos$nb_ham_std,
+  breaks = quantile(dat_pos$nb_ham_std, probs = seq(0, 1, 0.25), na.rm = TRUE),
+  include.lowest = TRUE
+)
+ggplot(dat_pos, aes(x = ham_class, y = trempe_std)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    x = "Nombre d'hameçons (classes)",
+    y = "Temps de trempe (standardisé)",
+    title = "Temps de trempe selon le nombre d'hameçons"
+  )
 #5. Contrôle des modèles ---------------------------------
 
 # sanity(m_null)
@@ -391,7 +441,46 @@ m_1 <- sdmTMB(
 #     dpi      = 300
 #   )
 # }
-# 
+
+
+dat_pos$resids <- residuals(m_1)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+  theme_bw()
+
+s <- simulate(m_1, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_1, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "residual-histogramme-m-1.png"),
+    plot     = hist_residual,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "qqplot_residual-m-1.png"),
+    plot     = QQplot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
 
 
@@ -1239,8 +1328,7 @@ for (an in annees) {
 
 #Indice d'abondance
 
-grid_small <- grid_with_id %>%
-  slice(seq(1, n(), by = 5))
+grid_small <- grid_with_id 
 grid_yrs <- tidyr::crossing(
   grid_small,
   Year = unique(dat_pos$Year)
