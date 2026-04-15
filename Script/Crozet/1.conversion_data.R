@@ -4,6 +4,7 @@
 biometrie <- readRDS("Data/biometrie.rds")
 capture <- readRDS("Data/capture_Agg.rds")
 Station <- readRDS("Data/Station.rds")
+Depredation <- read_csv("Data/DepredationData2025.csv")
 
 ### Fusionner les datas pour avoir 1 seul dataset----------------------------------
 
@@ -13,6 +14,21 @@ capture <- Station %>%
       ungroup() %>%
       dplyr::select(-c(Zone, GearType, TAAFseason)),
     by = "StationID"
+  )
+
+Depredation <- Depredation %>%
+  mutate(PKSTATION = as.character(PKSTATION))
+Depredation <- Depredation %>%
+  mutate(FKCAMPAGNE = as.character(FKCAMPAGNE))
+
+capture <- capture %>%
+  left_join(
+    Depredation %>%
+      select(PKSTATION, FKCAMPAGNE, PRES_CACHALOT, PRES_ORQUE, NB_MIN_CACHALOT, NB_MAX_CACHALOT, NB_MIN_ORQUE, NB_MAX_ORQUE), 
+    by = c(
+      "StationID" = "PKSTATION",
+      "CampaignID" = "FKCAMPAGNE"
+    )
   )
 
 biometrie <- biometrie %>%
@@ -281,7 +297,13 @@ data_CPUE <- data_all_cap %>%
     ScanWeightKg,
     HookHaul,
     TargetSpecies,
-    HaulEndDate
+    HaulEndDate,
+    PRES_CACHALOT, 
+    PRES_ORQUE, 
+    NB_MIN_CACHALOT, 
+    NB_MAX_CACHALOT, 
+    NB_MIN_ORQUE, 
+    NB_MAX_ORQUE
   )
 
 data_modelo = left_join(data_modelo, data_CPUE, by = c("StationID"))
