@@ -14,7 +14,8 @@ libr <- c(
 "ggeffects",
 "tidyterra",
 "cowplot",
-"lubridate"
+"lubridate",
+"readr"
 )
 
 lapply(libr, require, character.only = TRUE)

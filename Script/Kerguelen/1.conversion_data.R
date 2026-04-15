@@ -4,6 +4,7 @@
 biometrie <- readRDS("Data/biometrie.rds")
 capture <- readRDS("Data/capture_Agg.rds")
 Station <- readRDS("Data/Station.rds")
+DepredationData2025 <- read_csv("Data/DepredationData2025.csv")
 
 ### Fusionner les datas pour avoir 1 seul dataset----------------------------------
 

@@ -78,7 +78,7 @@ dat_pos <- dat_pres %>%
   filter(CPUE > 0, prof_bathy >= 500) %>%
   st_as_sf(coords = c("x", "y"), crs = 4326)
 
-dat_pos <- st_transform(dat_pos, 32742)
+dat_pos <- st_transform(dat_pos, 32743)
 
 # Calcul de la CPUE moyenne par station ou unité si besoin
 dat_summary <- dat_pos %>%
@@ -102,7 +102,7 @@ ggplot(dat_summary, aes(x = "", y = CPUE_mean)) +
 
 
 
-grille_10km <- st_make_grid(dat_sf,
+grille_10km <- st_make_grid(dat_pos,
                             cellsize = 10000,
                             square = TRUE)
 
@@ -388,6 +388,169 @@ for (an in mois) {
     dpi      = 300
   )
 }
+
+
+
+
+ham_grille <- dat_join %>%
+  group_by(id) %>%
+  summarise(
+    nb_ham_total = sum(nb_ham, na.rm = TRUE),
+    n_station = n()
+  )
+
+grille_ham <- left_join(
+  grille_10km,
+  st_drop_geometry(ham_grille),
+  by = "id"
+)
+
+grille_ham_ll <- st_transform(grille_ham, 4326)
+
+
+
+mean_obs <- ggplot() + xlim(48.5, 53.5) + ylim(-47.5, -45) + xlab("Longitude") + ylab("Latitude") +
+  # geom_sf(
+  #   data = RNN_AMP_sf %>% dplyr::filter(protection %in% c("R")),
+  #   colour = "#b2182b",
+  #   inherit.aes = F,
+  #   linewidth = 0.5,
+  #   # fill = "white"   
+  #   fill = "transparent"
+  #   ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-500")),
+    colour = "grey80",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-1000")),
+    colour = "grey60",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  # geom_sf(
+  #   data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-1500")),
+  #   colour = "grey30",
+  #   inherit.aes = F,
+  #   size = 0.5
+  # ) +
+  # geom_sf(
+  #   data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-2000")),
+  #   colour = "black",
+  #   inherit.aes = F,
+  #   size = 0.5
+  # ) +
+  geom_sf(
+    data = EEZ_sf,
+    fill = "transparent",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(data = FR_island_sf ,
+          fill = "darkgrey",
+          inherit.aes = F
+  ) + 
+  geom_sf(data = grille_ham_ll, aes(fill = nb_ham_total), color = NA) +
+  # geom_sf(data = dat_sf, size = 1, color = "black") +
+  scale_fill_viridis_c(
+    trans = "log10",
+    na.value = "transparent",
+    name = "Nb hameçons (log)"
+  ) +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "sum_ham_obs.png"),
+    plot     = mean_obs,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+#Idem mais une carte par année
+annees <- sort(unique(dat_pos$Year))
+
+liste_Ham <- list()
+
+for (an in annees) {
+  
+  dat_an <- dat_pos %>%
+    filter(Year == an)
+  
+  dat_join <- st_join(dat_an, grille_10km)
+  
+  ham_grille <- dat_join %>%
+    group_by(id) %>%
+    summarise(
+      nb_ham_total = sum(nb_ham, na.rm = TRUE),
+      n_station = n()
+    )
+  
+  grille_ham <- left_join(
+    grille_10km,
+    st_drop_geometry(ham_grille),
+    by = "id"
+  )
+  
+  grille_ham_ll <- st_transform(grille_ham, 4326)
+  
+  carte <- ggplot() +
+    xlim(48.5, 53.5) + ylim(-47.5, -45) +
+    xlab("Longitude") + ylab("Latitude") +
+    
+    geom_sf(
+      data = Isobath_KER_sf %>% filter(level %in% c("-500")),
+      colour = "grey80",
+      inherit.aes = FALSE,
+      size = 0.5
+    ) +
+    geom_sf(
+      data = Isobath_KER_sf %>% filter(level %in% c("-1000")),
+      colour = "grey60",
+      inherit.aes = FALSE,
+      size = 0.5
+    ) +
+    geom_sf(
+      data = EEZ_sf,
+      fill = "transparent",
+      inherit.aes = FALSE,
+      size = 0.5
+    ) +
+    geom_sf(
+      data = FR_island_sf,
+      fill = "darkgrey",
+      inherit.aes = FALSE
+    ) +
+    geom_sf(
+      data = grille_ham_ll,
+      aes(fill = nb_ham_total),
+      color = NA,
+      alpha = 0.7
+    ) +
+    scale_fill_viridis_c(
+      na.value = "transparent") +
+    ggtitle(paste("Année :", an))
+  
+  liste_Ham[[as.character(an)]] <- carte
+}
+
+for (an in annees) {
+  ggsave(
+    filename = file.path("data/", output_plot, paste0("Ham_", an, ".png")),
+    plot     = liste_Ham[[as.character(an)]],
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
 
 
 
