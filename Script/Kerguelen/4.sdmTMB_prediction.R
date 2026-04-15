@@ -182,15 +182,15 @@ cat("→ mesh.png sauvegardé\n\n")
 # )
 # 
 # 
-# m_spatemp <- sdmTMB(
-#   CPUE ~ 1,
-#   data = dat_pos,
-#   mesh = bspde_pos,
-#   family = Gamma(link = "log"),
-#   spatial = "on",
-#   time= "Year",
-#   spatiotemporal = "iid"
-# )
+m_spatemp <- sdmTMB(
+  CPUE ~ 1,
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
 # 
 # 
 # m_0 <- sdmTMB(
@@ -213,6 +213,13 @@ m_1 <- sdmTMB(
   time= "Year",
   spatiotemporal = "iid"
 )
+
+
+
+ll_1 <- as.numeric(logLik(m_1))
+ll_spat <- as.numeric(logLik(m_spatemp))
+
+delta_x1 <- 2 * (ll_1 - ll_spat)
 
 
 #5. Contrôle des modèles ---------------------------------
