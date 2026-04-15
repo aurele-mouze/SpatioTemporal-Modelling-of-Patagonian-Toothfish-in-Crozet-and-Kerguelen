@@ -78,6 +78,15 @@ dat_pos <- dat_pres %>%
   filter(CPUE > 0, prof_bathy >= 500) %>%
   st_as_sf(coords = c("x", "y"), crs = 4326)
 
+dat_map <- dat_pos %>%
+  mutate(
+    PRES_CACHALOT = case_when(
+      PRES_CACHALOT == "présence" ~ 1,
+      PRES_CACHALOT == "absence" ~ 0,
+      PRES_CACHALOT == "non obsé" ~ -1
+    )
+  )
+
 dat_pos <- st_transform(dat_pos, 32742)
 
 # 4. Faire une carte avec les CPUE moyennes sur des carrées de (définir la résolution) ------------------------------
@@ -85,7 +94,23 @@ dat_pos <- st_transform(dat_pos, 32742)
 #D'abord en moyenne sans prendre en compte l'année
 #Fais une grille de carré
 
-
+dat_pres <- dat_map %>%
+  filter(PRES_CACHALOT == 1)
+ggplot(dat_pres) +
+  geom_point(
+    aes(
+      x = x,
+      y = y,
+      size = nb_cachalot_min
+    ),
+    color = "red",
+    alpha = 0.7
+  ) +
+  scale_size_continuous(
+    range = c(2, 10),
+    name = "Nombre min cachalots"
+  ) +
+  theme_minimal()
 
 grille_10km <- st_make_grid(dat_sf,
                             cellsize = 10000,
@@ -676,3 +701,5 @@ for (an in annees) {
     dpi      = 300
   )
 }
+
+
