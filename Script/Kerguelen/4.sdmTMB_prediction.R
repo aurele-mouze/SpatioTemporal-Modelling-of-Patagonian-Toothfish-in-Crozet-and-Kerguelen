@@ -983,7 +983,7 @@ missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
 # Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_1, grid_all_years, chunk_size = 20000)
+pred_grid_raw <- predict_in_chunks(m_1, grid_all_years, chunk_size = 30000)
 
 
 
@@ -1262,13 +1262,11 @@ index <- get_index(
   area = rep(1, nrow(grid_yrs))
 )
 
-index_mean <- index %>%
-  mutate(est_mean = est / sum(rep(4, nrow(grid_yrs)) / length(unique(grid_yrs$Year))))
 
-Abundance_Index <- ggplot(index_mean, aes(Year, est)) +
+Abundance_Index <- ggplot(index, aes(Year, est)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
   geom_line(linewidth = 1, colour = "grey30") +
-  labs(x = "Year", y = "Biomasse (g/hameçon)") +
+  labs(x = "Year", y = "Biomass") +
   theme_bw()
 
 if (SavePlots) {

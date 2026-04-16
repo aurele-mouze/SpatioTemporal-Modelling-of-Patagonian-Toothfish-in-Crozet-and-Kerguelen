@@ -87,32 +87,28 @@ dat_map <- dat_pos %>%
     )
   )
 
+
+dat_Orque <- dat_pos %>%
+  mutate(
+    PRES_CACHALOT = case_when(
+      PRES_ORQUE == "présence" ~ 1,
+      PRES_ORQUE == "absence" ~ 0,
+      PRES_ORQUE == "non obsé" ~ -1
+    )
+  )
+
 dat_pos <- st_transform(dat_pos, 32742)
+
+dat_map <- st_transform(dat_map, 32742)
+
+dat_Orque <- st_transform(dat_Orque, 32742)
 
 # 4. Faire une carte avec les CPUE moyennes sur des carrées de (définir la résolution) ------------------------------
 
 #D'abord en moyenne sans prendre en compte l'année
 #Fais une grille de carré
 
-dat_pres <- dat_map %>%
-  filter(PRES_CACHALOT == 1)
-ggplot(dat_pres) +
-  geom_point(
-    aes(
-      x = x,
-      y = y,
-      size = nb_cachalot_min
-    ),
-    color = "red",
-    alpha = 0.7
-  ) +
-  scale_size_continuous(
-    range = c(2, 10),
-    name = "Nombre min cachalots"
-  ) +
-  theme_minimal()
-
-grille_10km <- st_make_grid(dat_sf,
+grille_10km <- st_make_grid(dat_pos,
                             cellsize = 10000,
                             square = TRUE)
 
@@ -702,4 +698,230 @@ for (an in annees) {
   )
 }
 
+
+
+
+
+dat_pres <- dat_map %>%
+  filter(PRES_CACHALOT == 1)
+
+
+dat_join_pred <- st_join(dat_pres, grille_10km)
+
+Cach_grille <- dat_join_pred %>%
+  group_by(id) %>%
+  summarise(
+    NB_OBS = n()   # 👉 nombre d'observations par cellule
+  )
+
+Cach_grille <- left_join(
+  grille_10km,
+  st_drop_geometry(Cach_grille),
+  by = "id"
+)
+
+Cach_grille_ll <- st_transform(Cach_grille, 4326)
+
+mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + ylab("Latitude") +
+  # geom_sf(
+  #   data = RNN_AMP_sf %>% dplyr::filter(protection %in% c("R")),
+  #   colour = "#b2182b",
+  #   inherit.aes = F,
+  #   linewidth = 0.5,
+  #   # fill = "white"   
+  #   fill = "transparent"
+  #   ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-500")),
+    colour = "grey80",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-1000")),
+    colour = "grey60",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  # geom_sf(
+  #   data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-1500")),
+  #   colour = "grey30",
+  #   inherit.aes = F,
+  #   size = 0.5
+  # ) +
+  # geom_sf(
+  #   data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-2000")),
+  #   colour = "black",
+  #   inherit.aes = F,
+  #   size = 0.5
+  # ) +
+  geom_sf(
+    data = EEZ_sf,
+    fill = "transparent",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(data = FR_island_sf ,
+          fill = "darkgrey",
+          inherit.aes = F
+  ) + 
+  geom_sf(data = Cach_grille_ll, aes(fill = NB_OBS), color = NA) +
+  # geom_sf(data = dat_sf, size = 1, color = "black") +
+  scale_fill_viridis_c(
+    trans = "log10",
+    na.value = "transparent",
+    name = "Number of observation (in log)"
+  ) +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "sum_Cach_obs.png"),
+    plot     = mean_obs,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+df_count <- dat_map %>%
+  mutate(
+    pres = case_when(
+      PRES_CACHALOT == 1 ~ "Présence",
+      PRES_CACHALOT == 0 ~ "Absence",
+      PRES_CACHALOT == -1 ~ "Non observé",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  group_by(Year, pres) %>%
+  summarise(n = n(), .groups = "drop")
+
+ggplot(df_count, aes(x = Year, y = n, fill = pres)) +
+  geom_col() +
+  scale_fill_manual(values = c(
+    "Présence" = "red",
+    "Absence" = "blue",
+    "Non observé" = "grey70"
+  )) +
+  labs(
+    x = "Year",
+    y = "Number of data",
+    fill = "Status"
+  ) +
+  theme_bw()
+
+
+
+
+
+
+
+dat_or <- dat_Orque %>%
+  filter(PRES_ORQUE == 1)
+
+
+dat_join_orque <- st_join(dat_or, grille_10km)
+
+Or_grille <- dat_join_orque %>%
+  group_by(id) %>%
+  summarise(
+    NB_OBS = n()   # 👉 nombre d'observations par cellule
+  )
+
+Or_grille <- left_join(
+  grille_10km,
+  st_drop_geometry(Or_grille),
+  by = "id"
+)
+
+Or_grille_ll <- st_transform(Or_grille, 4326)
+
+mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + ylab("Latitude") +
+  # geom_sf(
+  #   data = RNN_AMP_sf %>% dplyr::filter(protection %in% c("R")),
+  #   colour = "#b2182b",
+  #   inherit.aes = F,
+  #   linewidth = 0.5,
+  #   # fill = "white"   
+  #   fill = "transparent"
+  #   ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-500")),
+    colour = "grey80",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-1000")),
+    colour = "grey60",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  # geom_sf(
+  #   data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-1500")),
+  #   colour = "grey30",
+  #   inherit.aes = F,
+  #   size = 0.5
+  # ) +
+  # geom_sf(
+  #   data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-2000")),
+  #   colour = "black",
+  #   inherit.aes = F,
+  #   size = 0.5
+  # ) +
+  geom_sf(
+    data = EEZ_sf,
+    fill = "transparent",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(data = FR_island_sf ,
+          fill = "darkgrey",
+          inherit.aes = F
+  ) + 
+  geom_sf(data = Or_grille_ll, aes(fill = NB_OBS), color = NA) +
+  # geom_sf(data = dat_sf, size = 1, color = "black") +
+  scale_fill_viridis_c(
+    na.value = "transparent",
+    name = "Nb de Cachalot Observé"
+  ) +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "sum_Orq_obs.png"),
+    plot     = mean_obs,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+df_count <- dat_Orque %>%
+  mutate(
+    pres = case_when(
+      PRES_ORQUE == 1 ~ "Présence",
+      PRES_ORQUE == 0 ~ "Absence",
+      PRES_ORQUE == -1 ~ "Non observé",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  group_by(Year, pres) %>%
+  summarise(n = n(), .groups = "drop")
+
+ggplot(df_count, aes(x = Year, y = n, fill = pres)) +
+  geom_col() +
+  scale_fill_manual(values = c(
+    "Présence" = "red",
+    "Absence" = "blue",
+    "Non observé" = "grey70"
+  )) +
+  labs(
+    x = "Year",
+    y = "Number of data",
+    fill = "Status"
+  ) +
+  theme_bw()
 
