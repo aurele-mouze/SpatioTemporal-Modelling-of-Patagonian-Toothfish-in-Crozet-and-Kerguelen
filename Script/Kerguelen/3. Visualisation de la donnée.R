@@ -814,6 +814,74 @@ ggplot(df_count, aes(x = Year, y = n, fill = pres)) +
 
 
 
+dat_pres <- dat_pres %>%
+  mutate(
+    NB_MEAN_CACHALOT = (NB_MIN_CACHALOT + NB_MAX_CACHALOT) / 2
+  )
+
+dat_sf <- st_as_sf(dat_pres, coords = c("x", "y"), crs = 4326)
+dat_sf <- st_transform(dat_sf, 32742)  # même UTM que ton modèle
+coords <- st_coordinates(dat_sf)
+
+x <- coords[,1]
+y <- coords[,2]
+
+w <- dat_sf$NB_MEAN_CACHALOT
+library(MASS)
+
+# arrondir les poids pour éviter explosion mémoire
+w_round <- round(w)
+w_clean <- ifelse(is.na(w), 0, w)   # remplace NA par 0
+w_clean <- pmax(w_clean, 0)         # évite valeurs négatives
+w_round <- round(w_clean)
+# réplication des points
+x_rep <- rep(x, w_round)
+y_rep <- rep(y, w_round)
+
+kde <- kde2d(
+  x_rep,
+  y_rep,
+  n = 200
+)
+
+kde_df <- expand.grid(
+  X = kde$x,
+  Y = kde$y
+)
+
+kde_df$Z <- as.vector(kde$z)
+
+
+
+ggplot(kde_df, aes(x = X/1000, y = Y/1000, fill = Z)) +
+  geom_raster() +
+  scale_fill_viridis_c(name = "Intensity") +
+  coord_equal() +
+  theme_bw()
+
+
+FR_island_utm <- st_transform(FR_island_sf, 32742)
+EEZ_utm       <- st_transform(EEZ_sf, 32742)
+Isobath_utm   <- st_transform(Isobath_KER_sf, 32742)
+kde_df$Z[kde_df$Z < 1e-12] <- NA
+mean_obs <- ggplot() +
+  xlim(range(kde_df$X))+
+  ylim(range(kde_df$Y)) +
+  geom_sf(data = Isobath_utm %>% filter(level == "-500"), color = "grey80") +
+  geom_sf(data = EEZ_utm, fill = NA) +
+  geom_sf(data = FR_island_utm, fill = "darkgrey") +
+  geom_raster(data = kde_df, aes(x = X, y = Y, fill = Z)) +
+  coord_sf() +
+  scale_fill_viridis_c(
+    na.value = "transparent"
+  )+
+  theme_bw()
+
+
+
+
+
+
 
 
 

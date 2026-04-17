@@ -974,7 +974,7 @@ years <- sort(unique(dat_pos$Year))
 grid_all_years <- grid_with_id %>%
   tidyr::uncount(length(years)) %>%
   mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
-  mutate(nb_ham = 1) %>%
+  mutate(nb_ham = mean(dat_pos$nb_ham)) %>%
   relocate(cell_id)
 
 #Vérifier colonnes requises
@@ -1254,9 +1254,18 @@ grid_yrs <- tidyr::crossing(
 #     nb_ham_std = median(dat_pos$nb_ham_std, na.rm = TRUE),
 #     trempe_std = median(dat_pos$trempe_std, na.rm = TRUE)
 #   )
+offset_vec <- rep(
+  log(mean(dat_pos$nb_ham, na.rm = TRUE)),
+  nrow(grid_all_years)
+)
 
-p_st <- predict(m_1, newdata = grid_yrs, 
-                return_tmb_object = TRUE)
+p_st <- predict(
+  m_1,
+  newdata = grid_all_years,
+  offset = offset_vec,
+  return_tmb_object = TRUE
+)
+
 index <- get_index(
   p_st,
   area = rep(1, nrow(grid_yrs))
@@ -1284,7 +1293,8 @@ if (SavePlots) {
 # Effet marginal de Year, Month marginalisé
 # prédiction
 Year_effect <- ggpredict(
-  m_1,
+  m_1,,
+  offset = offset_vec,
   terms = "Year [all]",
   condition = c(nb_ham = 1)
 )

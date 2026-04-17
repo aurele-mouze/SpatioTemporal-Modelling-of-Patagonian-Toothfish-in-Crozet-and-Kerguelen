@@ -21,9 +21,12 @@ Depredation <- Depredation %>%
 Depredation <- Depredation %>%
   mutate(FKCAMPAGNE = as.character(FKCAMPAGNE))
 
+Depredation_unique <- Depredation %>%
+  distinct(PKSTATION, FKCAMPAGNE, .keep_all = TRUE)
+
 capture <- capture %>%
   left_join(
-    Depredation %>%
+    Depredation_unique %>%
       select(PKSTATION, FKCAMPAGNE, PRES_CACHALOT, PRES_ORQUE, NB_MIN_CACHALOT, NB_MAX_CACHALOT, NB_MIN_ORQUE, NB_MAX_ORQUE), 
     by = c(
       "StationID" = "PKSTATION",
