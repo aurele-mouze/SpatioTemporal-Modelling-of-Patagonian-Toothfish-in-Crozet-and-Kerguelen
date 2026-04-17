@@ -702,6 +702,7 @@ for (an in annees) {
 
 
 
+
 dat_pres <- dat_map %>%
   filter(PRES_CACHALOT == 1)
 
@@ -770,7 +771,7 @@ mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + yla
   scale_fill_viridis_c(
     trans = "log10",
     na.value = "transparent",
-    name = "Number of observation (in log)"
+    name = "Nb de Cachalot Observé"
   ) +
   theme_bw()
 
@@ -818,12 +819,12 @@ ggplot(df_count, aes(x = Year, y = n, fill = pres)) +
 
 
 dat_or <- dat_Orque %>%
-  filter(PRES_ORQUE == 1)
+  filter(PRES_ORQUE == "présence")
 
 
-dat_join_orque <- st_join(dat_or, grille_10km)
+dat_join_pred <- st_join(dat_or, grille_10km)
 
-Or_grille <- dat_join_orque %>%
+Or_grille <- dat_join_pred %>%
   group_by(id) %>%
   summarise(
     NB_OBS = n()   # 👉 nombre d'observations par cellule
@@ -883,8 +884,9 @@ mean_obs <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") + yla
   geom_sf(data = Or_grille_ll, aes(fill = NB_OBS), color = NA) +
   # geom_sf(data = dat_sf, size = 1, color = "black") +
   scale_fill_viridis_c(
+    trans = "log10",
     na.value = "transparent",
-    name = "Nb de Cachalot Observé"
+    name = "Number of observation of Killer whales (in log)"
   ) +
   theme_bw()
 
@@ -899,24 +901,14 @@ if (SavePlots) {
 }
 
 
-df_count <- dat_Orque %>%
-  mutate(
-    pres = case_when(
-      PRES_ORQUE == 1 ~ "Présence",
-      PRES_ORQUE == 0 ~ "Absence",
-      PRES_ORQUE == -1 ~ "Non observé",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  group_by(Year, pres) %>%
-  summarise(n = n(), .groups = "drop")
 
-ggplot(df_count, aes(x = Year, y = n, fill = pres)) +
-  geom_col() +
+
+ggplot(dat_Orque, aes(x = Year, fill = PRES_ORQUE)) +
+  geom_bar() +
   scale_fill_manual(values = c(
-    "Présence" = "red",
-    "Absence" = "blue",
-    "Non observé" = "grey70"
+    "présence" = "red",
+    "absence" = "blue",
+    "non obsé" = "grey70"
   )) +
   labs(
     x = "Year",
