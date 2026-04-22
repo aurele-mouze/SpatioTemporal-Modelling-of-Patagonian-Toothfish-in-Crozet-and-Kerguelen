@@ -220,3 +220,289 @@ m_1 <- sdmTMB(
   time= "Year",
   spatiotemporal = "iid"
 )
+
+
+
+#5. Contrôle des modèles ---------------------------------
+
+dat_pos$resids <- residuals(m_1)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+  theme_bw()
+
+s <- simulate(m_1, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_1, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "residual-histogramme-m_1.png"),
+    plot     = hist_residual,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "qqplot_residual-m_1.png"),
+    plot     = QQplot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+#6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
+# Import et préparation de la grille d’extrapolation spatiale
+Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapolCRO.rds"))
+
+# Mise à l’échelle de la profondeur et de la pente sur la grille
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))
+Extrapol_grid = Extrapol_grid %>% rename(depth = profondeur.pred)
+Extrapol_grid <- Extrapol_grid %>% mutate(depth_scaled = (depth - Mean_SD$Mean) / Mean_SD$SD)
+
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(slope), SD = sd(slope))
+Extrapol_grid <- Extrapol_grid %>% mutate(slope_scaled = (slope - Mean_SD$Mean) / Mean_SD$SD)
+
+# Nettoyage et sélection des colonnes nécessaires pour la prédiction
+grid <- Extrapol_grid %>%
+  mutate(
+    nb_ham = nb_ham,
+    tps_h = mean(dat$tps_h),
+    x = x / 1000 ,
+    y = y / 1000 
+  ) %>%
+  filter(!is.na(slope_scaled)) %>%
+  filter(!is.na(depth_scaled)) %>%
+  filter(depth > min_depth) %>%
+  rename(X = x, Y = y) %>%
+  dplyr::select(depth_scaled, slope_scaled, slope, depth, nb_ham, tps_h, X, Y) %>%
+  rename(prof_bathy = depth)
+
+
+#7. Prédictions -----------------------------------
+
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  mutate(cachalot_obs = 1,
+         orque_obs = 1,
+         nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+         NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE),
+         NB_MEAN_ORQUE = mean(dat_pos$NB_MEAN_ORQUE, na.rm = TRUE)) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict_in_chunks(m_1, grid_all_years, chunk_size = 20000)
+
+
+
+# Rattacher cell_id et transformer sur l'échelle réponse
+pred_grid <- pred_grid_raw %>%
+  mutate(cell_id = grid_all_years$cell_id,
+         CPUE_pred = est) %>%
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+
+# Moyenne temporelle par cellule spatiale
+pred_mean_cell <- pred_grid %>%
+  group_by(cell_id, X, Y, prof_bathy) %>%
+  summarise(CPUE_mean = mean(CPUE_pred, na.rm = TRUE), .groups = "drop")
+
+#  Carte moyenne -> sortie tout effets confondus
+mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", name = "Biomasse moyenne") +
+  coord_equal() +
+  labs(title = "Biomasse moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "mean_map_m_1.png"),
+    plot     = mean_map,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+annees <- sort(unique(dat_pos$Year))
+
+liste_cartes <- list()
+
+
+for (an in annees) {
+  # filtrer l'année
+  pred_year <- pred_grid %>%
+    filter(Year == an)
+  
+  # carte année courante
+  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
+    geom_tile() +
+    scale_fill_viridis_c(option = "viridis", name = "Biomasse prédite") +
+    coord_equal() +
+    labs(
+      title = paste("Biomasse prédite - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_Biomasse_pred_m_1_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+
+# prédiction
+PresCach_effect <- ggpredict(
+  m_1,
+  terms = c("NB_MEAN_CACHALOT [all]", "Year [all]")
+)
+
+meanPresCach_effect <- PresCach_effect %>%
+  group_by(x) %>%
+  summarise(
+    predicted = mean(predicted),
+    conf.low = mean(conf.low),
+    conf.high = mean(conf.high)
+  )
+
+PresCach_plot <- ggplot(meanPresCach_effect, aes(x = x, y = predicted)) +
+  geom_line(size = 1.2, color = "black") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.1) +
+  theme_bw()
+
+
+Cach_plot <- PresCach_plot +
+  geom_rug(
+    data = dat_pos,
+    aes(x = NB_MEAN_CACHALOT),
+    inherit.aes = FALSE,
+    alpha = 0.2
+  )
+
+# sauvegarder
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_Cach_m_1.png"),
+    plot     = Cach_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+Presorque_effect <- ggpredict(
+  m_1,
+  terms = c("NB_MEAN_ORQUE [all]", "Year [all]")
+)
+
+meanPresorque_effect <- Presorque_effect %>%
+  group_by(x) %>%
+  summarise(
+    predicted = mean(predicted),
+    conf.low = mean(conf.low),
+    conf.high = mean(conf.high)
+  )
+
+Presorque_plot <- ggplot(meanPresorque_effect, aes(x = x, y = predicted)) +
+  geom_line(size = 1.2, color = "black") +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high),
+              alpha = 0.1) +
+  theme_bw()
+
+
+Orque_plot <- Presorque_plot +
+  geom_rug(
+    data = dat_pos,
+    aes(x = NB_MEAN_ORQUE),
+    inherit.aes = FALSE,
+    alpha = 0.2
+  )
+
+# sauvegarder
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_Orque_m_1.png"),
+    plot     = Orque_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+#Indice d'abondance
+
+
+
+p_st <- predict(m_1, newdata = grid_all_years, 
+                return_tmb_object = TRUE)
+index <- get_index(
+  p_st,
+  area = rep(1, nrow(grid_all_years))
+)
+
+index_mean <- index %>%
+  mutate(est_mean = est / sum(rep(4, nrow(grid_all_years)) / length(unique(grid_all_years$Year))))
+
+Abundance_Index <- ggplot(index_mean, aes(Year, est)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  labs(x = "Year", y = "Biomasse (g/hameçon)") +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Indice_abondance_m_1.png"),
+    plot     = Abundance_Index,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
