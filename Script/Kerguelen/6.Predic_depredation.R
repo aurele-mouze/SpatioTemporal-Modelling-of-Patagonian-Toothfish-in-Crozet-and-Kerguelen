@@ -68,7 +68,7 @@ dat_clean <- dat %>% filter(!is.na(CPUE), !is.na(prof_bathy), !is.na(Year))
 
 dat_sf <- st_as_sf(dat_clean, coords = c("x","y"), crs = 4326)
 
-dat_sf <- st_transform(dat_sf, 32743)
+dat_sf <- st_transform(dat_sf, 32742)
 
 coords <- st_coordinates(dat_sf)
 
@@ -268,7 +268,7 @@ if (SavePlots) {
 
 #6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
 # Import et préparation de la grille d’extrapolation spatiale
-Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapolCRO.rds"))
+Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapol.rds"))
 
 # Mise à l’échelle de la profondeur et de la pente sur la grille
 Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))
@@ -439,18 +439,21 @@ if (SavePlots) {
 #Indice d'abondance
 p_st <- predict(m_1, newdata = grid_all_years, 
                 return_tmb_object = TRUE)
-index <- get_index(
-  p_st,
-  area = rep(1, nrow(grid_all_years))
+
+
+index <- get_index_split(
+  m_1,
+  newdata = grid_all_years,
+  area = rep(1, nrow(grid_all_years)),
+  nsplit = 20
 )
 
-index_mean <- index %>%
-  mutate(est_mean = est / sum(rep(4, nrow(grid_all_years)) / length(unique(grid_all_years$Year))))
 
-Abundance_Index <- ggplot(index_mean, aes(Year, est)) +
+
+Abundance_Index <- ggplot(index, aes(Year, est)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
   geom_line(linewidth = 1, colour = "grey30") +
-  labs(x = "Year", y = "Biomasse (g/hameçon)") +
+  labs(x = "Year", y = "Biomasse") +
   theme_bw()
 
 if (SavePlots) {

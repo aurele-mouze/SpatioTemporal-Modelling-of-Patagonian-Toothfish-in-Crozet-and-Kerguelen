@@ -912,3 +912,13 @@ mean_obs <- ggplot() +
   )+
   theme_bw()
 
+
+
+ggplot(dat_or, aes(x = NB_MEAN_ORQUE)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  theme_bw()
+
+
+ggplot(dat_pres, aes(x = NB_MEAN_CACHALOT)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  theme_bw()
