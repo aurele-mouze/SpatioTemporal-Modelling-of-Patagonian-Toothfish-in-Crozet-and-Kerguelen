@@ -208,7 +208,7 @@ if (SavePlots) {
 cat("→ mesh.png sauvegardé\n\n")
 
 m_spatemp <- sdmTMB(
-  ScanWeightKg ~ 1,
+  ScanWeightKg ~ s(Year),
   offset = log(dat_pos$nb_ham),
   data = dat_pos,
   mesh = bspde_pos,
@@ -218,10 +218,21 @@ m_spatemp <- sdmTMB(
   spatiotemporal = "iid"
 )
 
+
+m_2 <- sdmTMB(
+  ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) + s(NB_MEAN_ORQUE) + cachalot_obs + orque_obs,
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
 
 m_1 <- sdmTMB(
   ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) + s(NB_MEAN_ORQUE) + cachalot_obs + orque_obs,
-  offset = log(dat_pos$nb_ham),
+  offset = log(dat_pos$nb_ham ),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -231,9 +242,25 @@ m_1 <- sdmTMB(
 )
 
 
-m_spatially_varying <- sdmTMB(
+
+m_season_varying <- sdmTMB(
   ScanWeightKg ~ s(Year) + 
-    NB_MEAN_CACHALOT + NB_MEAN_ORQUE +   # ← effets globaux
+    s(NB_MEAN_CACHALOT) +  s(NB_MEAN_ORQUE) + s(Month, bs = "cc") +
+    cachalot_obs + orque_obs,
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "Year",
+  spatiotemporal = "iid"
+)
+
+
+m_season_varying_2 <- sdmTMB(
+  ScanWeightKg ~ s(Year) + 
+    s(Month, bs = "cc") + s(NB_MEAN_CACHALOT) +
+    s(NB_MEAN_ORQUE, by = Month) +
     cachalot_obs + orque_obs,
   offset = log(dat_pos$nb_ham),
   data = dat_pos,
@@ -241,10 +268,46 @@ m_spatially_varying <- sdmTMB(
   family = Gamma(link = "log"),
   spatial = "on",
   time = "Year",
-  spatiotemporal = "iid",
-  spatial_varying = ~ NB_MEAN_CACHALOT + NB_MEAN_ORQUE
+  spatiotemporal = "iid"
 )
 
+
+m_season_varying_3 <- sdmTMB(
+  ScanWeightKg ~ s(Year) + 
+    s(Month, bs = "cc") + s(NB_MEAN_ORQUE) +
+    s(NB_MEAN_CACHALOT, by = Month) +
+    cachalot_obs + orque_obs,
+  offset = log(dat_pos$nb_ham),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "Year",
+  spatiotemporal = "iid"
+)
+
+
+m_season_varying_4 <- sdmTMB(
+  ScanWeightKg ~ s(Year) + 
+    s(Month, bs = "cc") + s(NB_MEAN_ORQUE, by = Month) +
+    s(NB_MEAN_CACHALOT, by = Month) +
+    cachalot_obs + orque_obs,
+  offset = log(dat_pos$nb_ham),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "Year",
+  spatiotemporal = "iid"
+)
+
+#5. Contrôle des modèles ---------------------------------
+AIC(m_1)
+
+AIC(m_season_varying)
+AIC(m_season_varying_2)
+AIC(m_season_varying_3)
+AIC(m_season_varying_4)
 
 #5. Contrôle des modèles ---------------------------------
 AIC(m_1)
@@ -557,8 +620,8 @@ if (SavePlots) {
 
 
 
-p_st <- predict(m_1, newdata = grid_all_years, 
-                return_tmb_object = TRUE, offset = log(grid_all_years$nb_ham))
+p_st <- predict(m_2, newdata = grid_all_years, 
+                return_tmb_object = TRUE, offset = log(grid_all_years$nb_ham* 0.246))
 index <- get_index(
   p_st,
   area = rep(1, nrow(grid_all_years))
@@ -574,7 +637,7 @@ Abundance_Index <- ggplot(index, aes(Year, est)) +
 
 if (SavePlots) {
   ggsave(
-    filename = file.path("data/", output_plot, "Indice_abondance_m_1.png"),
+    filename = file.path("data/", output_plot, "Indice_abondance_m_2.png"),
     plot     = Abundance_Index,
     width    = 8,
     height   = 6,
@@ -624,9 +687,11 @@ grid_with_id <- dplyr::as_tibble(grid_with_id)
 
 #Réplication temporelle : une ligne par cellule × année
 years <- sort(unique(dat_pos$Year))
+month <- sort(unique(dat_pos$Month))
 grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id))) %>%
+  tidyr::uncount(length(years)*length(month)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id)*length(month)),
+         Month = rep(month, times = nrow(grid_with_id)*length(years))) %>%
   mutate(cachalot_obs = 1,
          orque_obs = 1,
          nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
@@ -641,7 +706,7 @@ if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(
 
 # Prédiction (utilise chunking si nécessaire)
 pred_grid_raw <- predict(
-  m_spatially_varying,
+  m_season_varying,
   newdata = grid_all_years,
   offset = log(grid_all_years$nb_ham),
   type = "link"
@@ -713,8 +778,64 @@ for (an in annees) {
 
 
 # prédiction
+Month_effect <- ggpredict(
+  m_season_varying,
+  terms = c("Month [all]", "Year [all]")
+)
+
+meanMonth_effect <- Month_effect %>%
+  group_by(x) %>%
+  summarise(
+    predicted = mean(predicted),
+    conf.low = mean(conf.low),
+    conf.high = mean(conf.high)
+  )
+
+
+# facteur de transformation
+coef <- max(meanMonth_effect$predicted) / max(table(dat_pos$Month))
+
+Month_plot <- ggplot() +
+  
+  # Histogramme (présence) → rescalé
+  geom_histogram(
+    data = dat_pos,
+    aes(x = Month, y = after_stat(count) * coef),
+    binwidth = 1,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.3
+  ) +
+  
+  # Ruban
+  geom_ribbon(
+    data = meanMonth_effect,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    alpha = 0.1
+  ) +
+  
+  # Courbe
+  geom_line(
+    data = meanMonth_effect,
+    aes(x = x, y = predicted),
+    size = 1.2
+  ) +
+  
+  # Double axe
+  scale_y_continuous(
+    name = "Predicted",
+    sec.axis = sec_axis(~ . / coef, name = "Nombre d'observations")
+  ) +
+  
+  theme_bw()
+
+
+
+
+
+
 PresCach_effect <- ggpredict(
-  m_spatially_varying,
+  m_season_varying,
   terms = c("NB_MEAN_CACHALOT [all]", "Year [all]")
 )
 
@@ -741,6 +862,45 @@ Cach_plot <- PresCach_plot +
     alpha = 0.2
   )
 
+
+# facteur de transformation
+coef <- max(meanPresCach_effect$predicted) / max(table(dat_pos$NB_MEAN_CACHALOT))
+
+Cach_plot <- ggplot() +
+  
+  # Histogramme (présence) → rescalé
+  geom_histogram(
+    data = dat_pos,
+    aes(x = NB_MEAN_CACHALOT, y = after_stat(count) * coef),
+    binwidth = 1,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.3
+  ) +
+  
+  # Ruban
+  geom_ribbon(
+    data = meanPresCach_effect,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    alpha = 0.1
+  ) +
+  
+  # Courbe
+  geom_line(
+    data = meanPresCach_effect,
+    aes(x = x, y = predicted),
+    size = 1.2
+  ) +
+  
+  # Double axe
+  scale_y_continuous(
+    name = "Predicted",
+    sec.axis = sec_axis(~ . / coef, name = "Nombre d'observations")
+  ) +
+  
+  theme_bw()
+
+
 # sauvegarder
 if (SavePlots) {
   ggsave(
@@ -754,7 +914,7 @@ if (SavePlots) {
 
 
 Presorque_effect <- ggpredict(
-  m_spatially_varying,
+  m_season_varying,
   terms = c("NB_MEAN_ORQUE [all]", "Year [all]")
 )
 
@@ -781,6 +941,45 @@ Orque_plot <- Presorque_plot +
     alpha = 0.2
   )
 
+
+# facteur de transformation
+coef <- max(meanPresorque_effect$predicted) / max(table(dat_pos$NB_MEAN_ORQUE))
+
+Orque_plot <- ggplot() +
+  
+  # Histogramme (présence) → rescalé
+  geom_histogram(
+    data = dat_pos,
+    aes(x = NB_MEAN_ORQUE, y = after_stat(count) * coef),
+    binwidth = 1,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.3
+  ) +
+  
+  # Ruban
+  geom_ribbon(
+    data = meanPresorque_effect,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    alpha = 0.1
+  ) +
+  
+  # Courbe
+  geom_line(
+    data = meanPresorque_effect,
+    aes(x = x, y = predicted),
+    size = 1.2
+  ) +
+  
+  # Double axe
+  scale_y_continuous(
+    name = "Predicted",
+    sec.axis = sec_axis(~ . / coef, name = "Nombre d'observations")
+  ) +
+  
+  theme_bw()
+
+
 # sauvegarder
 if (SavePlots) {
   ggsave(
@@ -798,7 +997,7 @@ if (SavePlots) {
 
 
 
-p_st <- predict(m_spatially_varying, newdata = grid_all_years, offset = log(grid_all_years$nb_ham),
+p_st <- predict(m_season_varying, newdata = grid_all_years, offset = log(grid_all_years$nb_ham),
                 return_tmb_object = TRUE)
 index <- get_index(
   p_st,
@@ -828,9 +1027,10 @@ if (SavePlots) {
 
 
 pred <- predict(
-  m_spatially_varying,
+  m_season_varying,
   newdata = grid_all_years,
   type = "link",
+  offset = log(grid_all_years$nb_ham),
   se_fit = FALSE
 )
 
@@ -838,7 +1038,7 @@ grid_no_orque <- grid_all_years
 grid_no_orque$NB_MEAN_ORQUE <- 0
 
 pred_no_orque <- predict(
-  m_spatially_varying,
+  m_season_varying,
   newdata = grid_no_orque,
   offset = log(grid_no_orque$nb_ham),
   type = "link"
@@ -849,7 +1049,7 @@ grid_no_cachalot <- grid_all_years
 grid_no_cachalot$NB_MEAN_CACHALOT <- 0
 
 pred_no_cach <- predict(
-  m_spatially_varying,
+  m_season_varying,
   newdata = grid_no_cachalot,
   offset = log(grid_no_cachalot$nb_ham),
   type = "link"
@@ -870,7 +1070,7 @@ effetOrq <- ggplot(grid_effet_orque) +
   coord_equal() +
   scale_fill_gradient2(
     low = "blue4",
-    mid = "cadetblue2",
+    mid = "azure",
     high = "red",
     midpoint = 0,
     name = "Effet orque"
@@ -883,7 +1083,7 @@ effetCach <- ggplot(grid_effet_cach) +
   coord_equal() +
   scale_fill_gradient2(
     low = "blue4",
-    mid = "cadetblue2",
+    mid = "azure",
     high = "red",
     midpoint = 0,
     name = "Effet Cachalot"

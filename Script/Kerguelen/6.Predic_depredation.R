@@ -207,11 +207,8 @@ if (SavePlots) {
 }
 cat("→ mesh.png sauvegardé\n\n")
 
-
-
-
-m_1 <- sdmTMB(
-  ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) +  cachalot_obs ,
+m_spatemp <- sdmTMB(
+  ScanWeightKg ~ s(Year),
   offset = log(dat_pos$nb_ham),
   data = dat_pos,
   mesh = bspde_pos,
@@ -222,8 +219,59 @@ m_1 <- sdmTMB(
 )
 
 
+m_1 <- sdmTMB(
+  ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) + cachalot_obs,
+  offset = log(dat_pos$nb_ham),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "Year",
+  spatiotemporal = "iid"
+)
+
+
+m_season_varying <- sdmTMB(
+  ScanWeightKg ~ s(Year) + 
+    s(NB_MEAN_CACHALOT) +  s(Month, bs = "cc") +
+    cachalot_obs,
+  offset = log(dat_pos$nb_ham),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "Year",
+  spatiotemporal = "iid"
+)
+
+
+m_season_varying_2 <- sdmTMB(
+  ScanWeightKg ~ s(Year) + 
+    s(Month, bs = "cc") +
+    s(NB_MEAN_CACHALOT, by = Month) +
+    cachalot_obs,
+  offset = log(dat_pos$nb_ham),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "Year",
+  spatiotemporal = "iid"
+)
+
 
 #5. Contrôle des modèles ---------------------------------
+AIC(m_1)
+AIC(m_season_varying)
+AIC(m_season_varying_2)
+
+ll_1 <- as.numeric(logLik(m_1))
+ll_spat <- as.numeric(logLik(m_spatemp))
+ll_2 <- as.numeric(logLik(m_spatially_varying))
+
+delta_x1 <- 2 * (ll_1 - ll_spat)
+delta_x2 <- 2 * (ll_2 - ll_spat)
+delta_x3 <- 2 * (ll_2 - ll_1)
 
 dat_pos$resids <- residuals(m_1)
 hist_residual <- ggplot(dat_pos, aes(x = resids)) +
@@ -264,6 +312,47 @@ if (SavePlots) {
   )
 }
 
+
+
+
+dat_pos$resids <- residuals(m_season_varying)
+hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+  geom_histogram(
+    bins = 30,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.7
+  ) +
+  labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
+  theme_bw()
+
+s <- simulate(m_season_varying, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_season_varying, test_uniformity = TRUE)
+
+QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
+  geom_point(alpha = 0.4) +
+  geom_abline(slope = 1, intercept = 0) +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "residual-histogramme-m_season_varying.png"),
+    plot     = hist_residual,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "qqplot_residual-m_season_varying.png"),
+    plot     = QQplot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
 
 
 #6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
@@ -314,8 +403,7 @@ grid_all_years <- grid_with_id %>%
   mutate(cachalot_obs = 1,
          orque_obs = 1,
          nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
-         NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE),
-         NB_MEAN_ORQUE = mean(dat_pos$NB_MEAN_ORQUE, na.rm = TRUE)) %>%
+         NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE)) %>%
   relocate(cell_id)
 
 #Vérifier colonnes requises
@@ -324,7 +412,12 @@ missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
 # Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_1, grid_all_years, chunk_size = 20000)
+pred_grid_raw <- predict(
+  m_1,
+  newdata = grid_all_years,
+  offset = log(grid_all_years$nb_ham),
+  type = "link"
+)
 
 
 
@@ -437,10 +530,6 @@ if (SavePlots) {
 
 
 #Indice d'abondance
-p_st <- predict(m_1, newdata = grid_all_years, 
-                return_tmb_object = TRUE)
-
-
 index <- get_index_split(
   m_1,
   newdata = grid_all_years,
@@ -448,12 +537,10 @@ index <- get_index_split(
   nsplit = 20
 )
 
-
-
 Abundance_Index <- ggplot(index, aes(Year, est)) +
   geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
   geom_line(linewidth = 1, colour = "grey30") +
-  labs(x = "Year", y = "Biomasse") +
+  labs(x = "Year", y = "Biomasse ") +
   theme_bw()
 
 if (SavePlots) {
@@ -468,3 +555,291 @@ if (SavePlots) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+month <- sort(unique(dat_pos$Month))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)*length(month)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id)*length(month)),
+         Month = rep(month, times = nrow(grid_with_id)*length(years))) %>%
+  mutate(cachalot_obs = 1,
+         orque_obs = 1,
+         nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+         NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE),
+         NB_MEAN_ORQUE = mean(dat_pos$NB_MEAN_ORQUE, na.rm = TRUE)) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict(
+  m_season_varying,
+  newdata = grid_all_years,
+  offset = log(grid_all_years$nb_ham),
+  type = "link"
+)
+
+
+# Rattacher cell_id et transformer sur l'échelle réponse
+pred_grid <- pred_grid_raw %>%
+  mutate(cell_id = grid_all_years$cell_id,
+         CPUE_pred = est) %>%
+  left_join(grid_with_id %>% dplyr::select(cell_id, nb_ham, tps_h, slope_scaled), by = "cell_id")
+
+# Moyenne temporelle par cellule spatiale
+pred_mean_cell <- pred_grid %>%
+  group_by(cell_id, X, Y, prof_bathy) %>%
+  summarise(CPUE_mean = mean(CPUE_pred, na.rm = TRUE), .groups = "drop")
+
+#  Carte moyenne -> sortie tout effets confondus
+mean_map <- ggplot(pred_mean_cell, aes(x = X, y = Y, fill = exp(CPUE_mean))) +
+  geom_raster() +
+  scale_fill_viridis_c(option = "viridis", name = "Biomasse moyenne") +
+  coord_equal() +
+  labs(title = "Biomasse moyenne (moyenne sur les années)", x = "X (km)", y = "Y (km)") +
+  theme_minimal()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "mean_map_m_spatially_varying.png"),
+    plot     = mean_map,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+annees <- sort(unique(dat_pos$Year))
+
+liste_cartes <- list()
+
+
+for (an in annees) {
+  # filtrer l'année
+  pred_year <- pred_grid %>%
+    filter(Year == an)
+  
+  # carte année courante
+  carte <- ggplot(pred_year, aes(x = X, y = Y, fill = exp(CPUE_pred))) +
+    geom_tile() +
+    scale_fill_viridis_c(option = "viridis", name = "Biomasse prédite") +
+    coord_equal() +
+    labs(
+      title = paste("Biomasse prédite - année", an),
+      x = "X (km)",
+      y = "Y (km)"
+    ) +
+    theme_minimal()
+  
+  if (SavePlots) {
+    ggsave(
+      filename = file.path("data/", output_plot, paste0("map_Biomasse_pred_m_spatially_varying_", an, ".png")),
+      plot = carte,
+      width = 8,
+      height = 6,
+      dpi = 300
+    )}
+}
+
+
+
+# prédiction
+PresCach_effect <- ggpredict(
+  m_season_varying,
+  terms = c("NB_MEAN_CACHALOT [all]", "Year [all]")
+)
+
+meanPresCach_effect <- PresCach_effect %>%
+  group_by(x) %>%
+  summarise(
+    predicted = mean(predicted),
+    conf.low = mean(conf.low),
+    conf.high = mean(conf.high)
+  )
+
+
+# facteur de transformation
+coef <- max(meanPresCach_effect$predicted) / max(table(dat_pos$NB_MEAN_CACHALOT))
+
+Cach_plot <- ggplot() +
+  
+  # Histogramme (présence) → rescalé
+  geom_histogram(
+    data = dat_pos,
+    aes(x = NB_MEAN_CACHALOT, y = after_stat(count) * coef),
+    binwidth = 1,
+    fill = "steelblue",
+    color = "black",
+    alpha = 0.3
+  ) +
+  
+  # Ruban
+  geom_ribbon(
+    data = meanPresCach_effect,
+    aes(x = x, ymin = conf.low, ymax = conf.high),
+    alpha = 0.1
+  ) +
+  
+  # Courbe
+  geom_line(
+    data = meanPresCach_effect,
+    aes(x = x, y = predicted),
+    size = 1.2
+  ) +
+  
+  # Double axe
+  scale_y_continuous(
+    name = "Predicted",
+    sec.axis = sec_axis(~ . / coef, name = "Nombre d'observations")
+  ) +
+  
+  theme_bw()
+
+
+# sauvegarder
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Effet_Cach_m_spatially_varying.png"),
+    plot     = Cach_plot,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+
+
+#Indice d'abondance
+grid_index <- grid_with_id %>%
+  tidyr::crossing(Year = years) %>%
+  mutate(
+    Month = 6,  # ou moyenne saisonnière
+    cachalot_obs = 1,
+    nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+    NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE)
+  )
+
+
+index <- get_index_split(
+  m_season_varying,
+  newdata = grid_index,
+  area = 0.246,
+  nsplit = 3
+)
+
+
+
+Abundance_Index <- ggplot(index, aes(Year, est)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
+  geom_line(linewidth = 1, colour = "grey30") +
+  labs(x = "Year", y = "Biomasse ") +
+  theme_bw()
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Indice_abondance_m_spatially_varying.png"),
+    plot     = Abundance_Index,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+
+
+
+pred <- predict(
+  m_season_varying,
+  newdata = grid_all_years,
+  type = "link",
+  offset = log(grid_all_years$nb_ham),
+  se_fit = FALSE
+)
+
+
+
+grid_no_cachalot <- grid_all_years
+grid_no_cachalot$NB_MEAN_CACHALOT <- 0
+
+pred_no_cach <- predict(
+  m_season_varying,
+  newdata = grid_no_cachalot,
+  offset = log(grid_no_cachalot$nb_ham),
+  type = "link"
+)
+
+
+grid_effet_cach <- grid_all_years
+
+grid_effet_cach$effet_cach <- pred$est - pred_no_cach$est
+
+
+
+effetCach <- ggplot(grid_effet_cach) +
+  geom_raster(aes(x = X, y = Y, fill = effet_cach)) +
+  coord_equal() +
+  scale_fill_gradient2(
+    low = "blue4",
+    mid = "cadetblue2",
+    high = "red",
+    midpoint = 0,
+    name = "Effet Cachalot"
+  ) +
+  theme_minimal()
+
+
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "effetCach.png"),
+    plot     = effetCach,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
