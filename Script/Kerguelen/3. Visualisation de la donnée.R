@@ -103,6 +103,125 @@ dat_map <- st_transform(dat_map, 32742)
 
 dat_Orque <- st_transform(dat_Orque, 32742)
 
+
+
+
+df_month <- dat_pos %>%
+  st_drop_geometry() %>%
+  group_by(Month) %>%
+  summarise(
+    CPUE_mean = mean(CPUE, na.rm = TRUE),
+    CPUE_sd = sd(CPUE, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(df_month, aes(x = Month, y = CPUE_mean)) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin = CPUE_mean - CPUE_sd,
+                    ymax = CPUE_mean + CPUE_sd),
+                width = 0.2) +
+  theme_bw() +
+  labs(
+    x = "Mois",
+    y = "CPUE moyenne",
+    title = "Variation mensuelle de la CPUE"
+  )
+
+
+ggplot(st_drop_geometry(dat_pos), aes(x = factor(Month), y = CPUE)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(
+    x = "Mois",
+    y = "CPUE",
+    title = "Distribution de la CPUE par mois"
+  )
+
+
+
+
+
+dat_pos <- dat_pos %>%
+  mutate(
+    NB_MEAN_CACHALOT = case_when(
+      !is.na(NB_MIN_CACHALOT) & !is.na(NB_MAX_CACHALOT) ~ (NB_MIN_CACHALOT + NB_MAX_CACHALOT) / 2,
+      is.na(NB_MIN_CACHALOT) & !is.na(NB_MAX_CACHALOT) ~ NB_MAX_CACHALOT,
+      !is.na(NB_MIN_CACHALOT) & is.na(NB_MAX_CACHALOT) ~ NB_MIN_CACHALOT,
+      TRUE ~ NA_real_
+    )
+  )
+
+dat_pos <- dat_pos %>%
+  mutate(
+    NB_MEAN_ORQUE = case_when(
+      !is.na(NB_MIN_ORQUE) & !is.na(NB_MAX_ORQUE) ~ (NB_MIN_ORQUE + NB_MAX_ORQUE) / 2,
+      is.na(NB_MIN_ORQUE) & !is.na(NB_MAX_ORQUE) ~ NB_MAX_ORQUE,
+      !is.na(NB_MIN_ORQUE) & is.na(NB_MAX_ORQUE) ~ NB_MIN_ORQUE,
+      TRUE ~ NA_real_
+    )
+  )
+
+dat_pos <- dat_pos %>%
+  mutate(
+    # indicateur d'observation
+    cachalot_obs = as.integer(PRES_CACHALOT != "non obsé"),
+    orque_obs = as.integer(PRES_ORQUE != "non obsé"),
+    
+    # remplacer NA uniquement quand non observé
+    NB_MEAN_CACHALOT = ifelse(PRES_CACHALOT == "non obsé", 0, NB_MEAN_CACHALOT),
+    NB_MEAN_ORQUE = ifelse(PRES_ORQUE == "non obsé", 0, NB_MEAN_ORQUE)
+  )
+
+
+dat_pos <- dat_pos %>%
+  filter(!Year %in% c(2002, 2025))
+
+dat_pos <- dat_pos %>%
+  filter(
+    !is.na(PRES_CACHALOT),
+    !is.na(PRES_ORQUE)
+  )
+
+dat_pos <- dat_pos %>%
+  filter(
+    !is.na(NB_MEAN_CACHALOT),
+    !is.na(NB_MEAN_ORQUE)
+  )
+
+df_Cach <- dat_pos %>%
+  st_drop_geometry() %>%
+  group_by(NB_MEAN_CACHALOT) %>%
+  summarise(
+    CPUE_mean = mean(CPUE, na.rm = TRUE),
+    CPUE_sd = sd(CPUE, na.rm = TRUE),
+    n = n()
+  )
+
+ggplot(df_Cach, aes(x = NB_MEAN_CACHALOT, y = CPUE_mean)) +
+  geom_line() +
+  geom_point() +
+  geom_errorbar(aes(ymin = CPUE_mean - CPUE_sd,
+                    ymax = CPUE_mean + CPUE_sd),
+                width = 0.2) +
+  theme_bw() +
+  labs(
+    x = "Nb Cachalot",
+    y = "CPUE moyenne",
+    title = "Variation de la CPUE en fonction du nombre de cachalot"
+  )
+
+
+ggplot(st_drop_geometry(dat_pos), aes(x = factor(NB_MEAN_CACHALOT), y = CPUE)) +
+  geom_boxplot() +
+  theme_bw() +
+  labs(
+    x = "Nb Cachalot",
+    y = "CPUE",
+    title = "Distribution de la CPUE par en fonction du nombre de cachalot"
+  )
+
+
 # 4. Faire une carte avec les CPUE moyennes sur des carrées de (définir la résolution) ------------------------------
 
 #D'abord en moyenne sans prendre en compte l'année
@@ -981,6 +1100,37 @@ ggplot(dat_Orque, aes(x = Year, fill = PRES_ORQUE)) +
   labs(
     x = "Year",
     y = "Number of data",
+    fill = "Status"
+  ) +
+  theme_bw()
+
+
+
+
+ggplot(dat_pos, aes(x = Month, fill = PRES_CACHALOT)) +
+  geom_bar() +
+  scale_fill_manual(values = c(
+    "présence" = "red",
+    "absence" = "blue",
+    "non obsé" = "grey70"
+  )) +
+  labs(
+    x = "Year",
+    y = "Number of data",
+    fill = "Status"
+  ) +
+  theme_bw()
+
+ggplot(dat_pos, aes(x = Month, fill = PRES_CACHALOT)) +
+  geom_bar(position = "fill") +
+  scale_fill_manual(values = c(
+    "présence" = "red",
+    "absence" = "blue",
+    "non obsé" = "grey70"
+  )) +
+  labs(
+    x = "Month",
+    y = "Proportion",
     fill = "Status"
   ) +
   theme_bw()

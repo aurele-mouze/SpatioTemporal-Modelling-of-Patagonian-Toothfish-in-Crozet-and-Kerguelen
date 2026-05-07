@@ -220,7 +220,7 @@ m_spatemp <- sdmTMB(
 
 
 m_2 <- sdmTMB(
-  ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) + s(NB_MEAN_ORQUE) + cachalot_obs + orque_obs,
+  ScanWeightKg ~ s(Year) + s(Month, bs = "cc"),
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
@@ -230,16 +230,16 @@ m_2 <- sdmTMB(
   spatiotemporal = "iid"
 )
 
-m_1 <- sdmTMB(
-  ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) + s(NB_MEAN_ORQUE) + cachalot_obs + orque_obs,
-  offset = log(dat_pos$nb_ham ),
-  data = dat_pos,
-  mesh = bspde_pos,
-  family = Gamma(link = "log"),
-  spatial = "on",
-  time= "Year",
-  spatiotemporal = "iid"
-)
+# m_1 <- sdmTMB(
+#   ScanWeightKg ~ s(Year) + s(NB_MEAN_CACHALOT) + s(NB_MEAN_ORQUE) + cachalot_obs + orque_obs,
+#   offset = log(dat_pos$nb_ham ),
+#   data = dat_pos,
+#   mesh = bspde_pos,
+#   family = Gamma(link = "log"),
+#   spatial = "on",
+#   time= "Year",
+#   spatiotemporal = "iid"
+# )
 
 
 
@@ -257,12 +257,29 @@ m_season_varying <- sdmTMB(
 )
 
 
+m_season_varying_inter <- sdmTMB(
+  ScanWeightKg ~ s(Year) + 
+    s(NB_MEAN_CACHALOT) +  s(NB_MEAN_ORQUE) + s(Month, bs = "cc") +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "Year",
+  spatiotemporal = "iid"
+)
+
+visreg(m_season_varying, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
+visreg(m_season_varying, xvar = "NB_MEAN_ORQUE", gg = TRUE)
+visreg(m_season_varying, xvar = "Month", gg = TRUE)
+
 m_season_varying_2 <- sdmTMB(
   ScanWeightKg ~ s(Year) + 
     s(Month, bs = "cc") + s(NB_MEAN_CACHALOT) +
     s(NB_MEAN_ORQUE, by = Month) +
     cachalot_obs + orque_obs,
-  offset = log(dat_pos$nb_ham),
+  offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -277,7 +294,7 @@ m_season_varying_3 <- sdmTMB(
     s(Month, bs = "cc") + s(NB_MEAN_ORQUE) +
     s(NB_MEAN_CACHALOT, by = Month) +
     cachalot_obs + orque_obs,
-  offset = log(dat_pos$nb_ham),
+  offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -292,7 +309,7 @@ m_season_varying_4 <- sdmTMB(
     s(Month, bs = "cc") + s(NB_MEAN_ORQUE, by = Month) +
     s(NB_MEAN_CACHALOT, by = Month) +
     cachalot_obs + orque_obs,
-  offset = log(dat_pos$nb_ham),
+  offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -300,6 +317,9 @@ m_season_varying_4 <- sdmTMB(
   time = "Year",
   spatiotemporal = "iid"
 )
+
+
+
 
 #5. Contrôle des modèles ---------------------------------
 AIC(m_1)
@@ -310,7 +330,7 @@ AIC(m_season_varying_3)
 AIC(m_season_varying_4)
 
 #5. Contrôle des modèles ---------------------------------
-AIC(m_1)
+AIC(m_2)
 AIC(m_spatially_varying)
  
 ll_1 <- as.numeric(logLik(m_1))
@@ -647,8 +667,19 @@ if (SavePlots) {
 
 
 
+grid_index <- grid_with_id %>%
+  crossing(Year = years, Month = 1:12) %>%
+  mutate(
+    nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+    scenario = "Modèle sans déprédation"
+  )
 
-
+index_ <- get_index_split(
+  m_2,
+  newdata = grid_index,
+  area = 1,
+  nsplit = 3
+)
 
 
 
@@ -994,22 +1025,145 @@ if (SavePlots) {
 
 
 #Indice d'abondance
+#Indice d'abondance
+grid_index_0 <- grid_with_id %>%
+  crossing(Year = years, Month = 1:12) %>%
+  mutate(
+    cachalot_obs = 1,
+    orque_obs = 1,
+    nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+    NB_MEAN_CACHALOT = 0,
+    NB_MEAN_ORQUE = 0,
+    scenario = "Modèle de déprédation"
+  )
 
 
+grid_index_mean_cach <- grid_with_id %>%
+  crossing(Year = years, Month = 1:12) %>%
+  mutate(
+    cachalot_obs = 1,
+    orque_obs = 1,
+    nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+    NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE), #ajout par année
+    NB_MEAN_ORQUE = 0,
+    scenario = "Cachalot moyen"
+  )
 
-p_st <- predict(m_season_varying, newdata = grid_all_years, offset = log(grid_all_years$nb_ham),
-                return_tmb_object = TRUE)
-index <- get_index(
-  p_st,
-  area = rep(1, nrow(grid_all_years))
+grid_index_mean_orque <- grid_with_id %>%
+  crossing(Year = years, Month = 1:12) %>%
+  mutate(
+    cachalot_obs = 1,
+    orque_obs = 1,
+    nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+    NB_MEAN_CACHALOT = 0,
+    NB_MEAN_ORQUE = mean(dat_pos$NB_MEAN_ORQUE, na.rm = TRUE),
+    scenario = "Orque moyen"
+  )
+
+grid_index_mean <- grid_with_id %>%
+  crossing(Year = years, Month = 1:12) %>%
+  mutate(
+    cachalot_obs = 1,
+    orque_obs = 1,
+    nb_ham = mean(dat_pos$nb_ham, na.rm = TRUE),
+    NB_MEAN_CACHALOT = mean(dat_pos$NB_MEAN_CACHALOT, na.rm = TRUE),
+    NB_MEAN_ORQUE = mean(dat_pos$NB_MEAN_ORQUE, na.rm = TRUE),
+    scenario = "déprédation moyen"
+  )
+
+index_0 <- get_index_split(
+  m_season_varying,
+  newdata = grid_index_0,
+  area = 1,
+  nsplit = 3
 )
 
 
+index_mean <- get_index_split(
+  m_season_varying,
+  newdata = grid_index_mean,
+  area = 1,
+  nsplit = 3
+)
 
-Abundance_Index <- ggplot(index, aes(Year, est)) +
-  geom_ribbon(aes(ymin = lwr, ymax = upr), fill = "grey90") +
-  geom_line(linewidth = 1, colour = "grey30") +
-  labs(x = "Year", y = "Biomasse ") +
+index_mean_orque <- get_index_split(
+  m_season_varying,
+  newdata = grid_index_mean_orque,
+  area = 1,
+  nsplit = 3
+)
+
+index_mean_cachalot <- get_index_split(
+  m_season_varying,
+  newdata = grid_index_mean_cach,
+  area = 1,
+  nsplit = 3
+)
+
+index_0_year <- index_0 %>%
+  group_by(Year) %>%
+  summarise(
+    est = weighted.mean(est, w = nb_ham),
+    lwr = weighted.mean(lwr, w = nb_ham),
+    upr = weighted.mean(upr, w = nb_ham)
+  ) %>%
+  mutate(scenario = "Modèle avec déprédation")
+
+
+index_year <- index_ %>%
+  group_by(Year) %>%
+  summarise(
+    est = weighted.mean(est, w = nb_ham),
+    lwr = weighted.mean(lwr, w = nb_ham),
+    upr = weighted.mean(upr, w = nb_ham)
+  ) %>%
+  mutate(scenario = "Modèle sans déprédation")
+index_
+
+
+index_mean_year <- index_mean %>%
+  group_by(Year) %>%
+  summarise(
+    est = weighted.mean(est, w = nb_ham),
+    lwr = weighted.mean(lwr, w = nb_ham),
+    upr = weighted.mean(upr, w = nb_ham)
+  ) %>%
+  mutate(scenario = "déprédation moyen")
+
+index_mean_cachalot_year <- index_mean_cachalot %>%
+  group_by(Year) %>%
+  summarise(
+    est = weighted.mean(est, w = nb_ham),
+    lwr = weighted.mean(lwr, w = nb_ham),
+    upr = weighted.mean(upr, w = nb_ham)
+  ) %>%
+  mutate(scenario = "Cachalot moyen")
+
+index_mean_orque_year <- index_mean_orque %>%
+  group_by(Year) %>%
+  summarise(
+    est = weighted.mean(est, w = nb_ham),
+    lwr = weighted.mean(lwr, w = nb_ham),
+    upr = weighted.mean(upr, w = nb_ham)
+  ) %>%
+  mutate(scenario = "Orque moyen")
+
+
+
+index_all <- bind_rows(index_0_year, index_mean_year, index_mean_orque_year, index_mean_cachalot_year)
+
+index_comp <- bind_rows(index_0_year, index_year)
+
+
+Abundance_Index <- ggplot(index_comp, aes(Year, est, color = scenario, fill = scenario)) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.2, color = NA) +
+  geom_line(linewidth = 1.2) +
+  labs(
+    x = "Year",
+    y = "Biomasse",
+    color = "Scenario",
+    fill = "Scenario"
+  ) +
   theme_bw()
 
 if (SavePlots) {
@@ -1021,6 +1175,52 @@ if (SavePlots) {
     dpi      = 300
   )
 }
+
+
+
+if (SavePlots) {
+  ggsave(
+    filename = file.path("data/", output_plot, "Indice_abondance_m_spatially_varying.png"),
+    plot     = Abundance_Index,
+    width    = 8,
+    height   = 6,
+    dpi      = 300
+  )
+}
+
+
+diff_index <- index_comp %>%
+  # garder la référence
+  filter(scenario == "Modèle avec déprédation") %>%
+  select(Year, est_ref = est) %>%
+  
+  # joindre avec tous les scénarios
+  right_join(index_comp, by = "Year") %>%
+  
+  # calcul de la différence
+  mutate(diff = est - est_ref)
+
+
+
+
+diff_index <- index_comp %>%
+  filter(scenario == "Modèle avec déprédation") %>%
+  select(Year, est_ref = est) %>%
+  right_join(index_comp, by = "Year") %>%
+  mutate(
+    perc_diff = (est - est_ref) / est_ref * 100
+  )
+
+
+ggplot(diff_index, aes(Year, perc_diff, color = scenario)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_line(linewidth = 1.2) +
+  labs(
+    x = "Year",
+    y = "Variation (%) par rapport au scénario sans déprédation",
+    color = "Scenario"
+  ) +
+  theme_bw()
 
 
 
