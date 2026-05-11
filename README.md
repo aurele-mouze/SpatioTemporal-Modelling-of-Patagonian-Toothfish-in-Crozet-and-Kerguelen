@@ -30,8 +30,8 @@ All processing steps are organised into numbered subfolders within the `Projects
   Scripts to format and clean the extracted data. Formatted outputs are saved in `Data`.  
   These scripts are executed only if `UpdateData = TRUE` in the configuration file.
  
-- `4.Report_Summary_and_Fig`  
-  Scripts to generate summary tables, reports, and plots describing the data.
+- `4. to ....`  
+  Scripts to generate sdmTMB model and analysis.
  
 ---
  
