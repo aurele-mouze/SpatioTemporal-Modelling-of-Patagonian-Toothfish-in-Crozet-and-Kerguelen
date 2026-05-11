@@ -24,11 +24,11 @@ All processing steps are organised into numbered subfolders within the `Projects
  
 - `1.Extract_data`  
   Scripts to extract the required data frames from PECHEKER. Outputs are saved in `Data`.  
-  These scripts are executed only if `UpdateData = TRUE` in the configuration file.
+  
  
-- `2.Format_data`  
-  Scripts to format and clean the extracted data. Formatted outputs are saved in `Data`.  
-  These scripts are executed only if `UpdateData = TRUE` in the configuration file.
+- `2.Prepare_Grid`  
+  Scripts to create the grid. Formatted outputs are saved in `Data`.  
+ 
  
 - `4. to ....`  
   Scripts to generate sdmTMB model and analysis.
