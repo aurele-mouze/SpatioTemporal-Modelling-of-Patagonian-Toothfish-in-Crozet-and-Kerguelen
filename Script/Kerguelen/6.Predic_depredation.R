@@ -209,7 +209,7 @@ cat("→ mesh.png sauvegardé\n\n")
 
 m_spatemp <- sdmTMB(
   ScanWeightKg ~ s(Year),
-  offset = log(dat_pos$nb_ham),
+  offset = log(dat_pos$nb_ham*0.246),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -469,7 +469,7 @@ if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(
 
 # Prédiction (utilise chunking si nécessaire)
 pred_grid_raw <- predict(
-  m_1,
+  m_spatemp,
   newdata = grid_all_years,
   offset = log(grid_all_years$nb_ham),
   type = "link"
@@ -587,7 +587,7 @@ if (SavePlots) {
 
 #Indice d'abondance
 index <- get_index_split(
-  m_1,
+  m_spatemp,
   newdata = grid_all_years,
   area = rep(1, nrow(grid_all_years)),
   nsplit = 20

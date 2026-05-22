@@ -259,7 +259,7 @@ m_season_varying <- sdmTMB(
 
 m_season_varying_inter <- sdmTMB(
   ScanWeightKg ~ s(Year) + 
-    s(NB_MEAN_CACHALOT) +  s(NB_MEAN_ORQUE) + s(Month, bs = "cc") +
+      s(Month, bs = "cc") +
     cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
@@ -306,8 +306,8 @@ m_season_varying_3 <- sdmTMB(
 
 m_season_varying_4 <- sdmTMB(
   ScanWeightKg ~ s(Year) + 
-    s(Month, bs = "cc") + s(NB_MEAN_ORQUE, by = Month) +
-    s(NB_MEAN_CACHALOT, by = Month) +
+    s(Month, bs = "cc") + s(NB_MEAN_ORQUE, Month) +
+    s(NB_MEAN_CACHALOT, Month) +
     cachalot_obs + orque_obs,
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
