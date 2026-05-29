@@ -262,8 +262,7 @@ visreg(m_season_varying, xvar = "Month", gg = TRUE)
 m_season_varying_1 <- sdmTMB(
   ScanWeightKg ~ s(Year) + 
     s(Month, bs = "cc")  +
-    s(NB_MEAN_CACHALOT, Month) +
-    cachalot_obs ,
+    s(NB_MEAN_CACHALOT)  ,
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
@@ -274,7 +273,6 @@ m_season_varying_1 <- sdmTMB(
 )
 
 visreg(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
-visreg(m_season_varying_1, xvar = "cachalot_obs", gg = TRUE)
 visreg(m_season_varying_1, xvar = "Month", gg = TRUE)
 visreg2d(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
 
@@ -297,4 +295,247 @@ visreg(m_season_varying_1, xvar = "cachalot_obs", gg = TRUE)
 visreg(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
 visreg(m_season_varying_1, xvar = "Month", gg = TRUE)
 visreg2d(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
+
+
+
+
+
+
+
+
+#Calcul des pertes par station
+# =========================
+# Prédictions par station
+# =========================
+
+
+
+# 2. Jeux de données pour les scénarios
+# -------------------------------------
+
+# Situation réelle (avec déprédation observée)
+dat_reel <- dat_pos
+
+# Sans aucune déprédation
+dat_sans_dep <- dat_pos %>%
+  mutate(
+    NB_MEAN_CACHALOT = 0,
+    NB_MEAN_ORQUE = 0
+  )
+
+
+# 3. Offsets
+# ----------
+offset_reel <- log(0.246 * dat_reel$nb_ham)
+offset_sans_dep <- log(0.246 * dat_sans_dep$nb_ham)
+offset_sans_orque <- log(0.246 * dat_sans_orque$nb_ham)
+offset_sans_cachalot <- log(0.246 * dat_sans_cachalot$nb_ham)
+
+# 4. Prédictions du modèle
+# ------------------------
+
+pred_reel <- predict(
+  m_season_varying_2,
+  newdata = dat_reel,
+  offset = offset_reel,  # si on veut une CPUE en sortie
+  type = "response"
+)
+
+pred_sans_dep <- predict(
+  m_season_varying_2,
+  newdata = dat_sans_dep,
+  offset = offset_sans_dep,
+  type = "response"
+)
+
+
+# 5. Dataframe final
+# ------------------
+
+df_station_predictions <- dat_pos %>%
+  mutate(
+    poids_reel = ScanWeightKg,
+    
+    pred_modele = pred_reel$est,
+    
+    pred_sans_dep = pred_sans_dep$est,
+    
+    perte_totale = pred_sans_dep - pred_modele
+  ) %>%
+  select(
+    StationID,
+    Year,
+    Month,
+    ScanWeightKg,
+    nb_ham,
+    NB_MEAN_CACHALOT,
+    X,
+    Y,
+    cachalot_obs,
+    poids_reel,
+    pred_modele,
+    pred_sans_dep,
+    perte_totale
+  )
+
+# Résultat
+head(df_station_predictions)
+
+saveRDS(df_station_predictions,
+        "prediction_depredation_kerguelen.rds")
+
+# Création des pourcentages
+df_boxplot_pct <- df_station_predictions %>%
+  mutate(
+    perte_totale_pct =
+      100 * (pred_sans_dep - pred_modele) / pred_sans_dep
+  ) %>%
+  
+  select(
+    Year,
+    perte_totale_pct,
+  ) %>%
+  
+  pivot_longer(
+    cols = -Year,
+    names_to = "type_perte",
+    values_to = "pourcentage_perte"
+  ) %>%
+  
+  mutate(
+    type_perte = recode(
+      type_perte,
+      perte_totale_pct = "Déprédation totale",
+      perte_orque_pct = "Perte orques",
+      perte_cachalot_pct = "Perte cachalots"
+    )
+  )
+
+# Boxplots
+ggplot(df_boxplot_pct,
+       aes(x = factor(Year),
+           y = pourcentage_perte,
+           fill = type_perte)) +
+  
+  geom_boxplot(
+    position = position_dodge(width = 0.8),
+    alpha = 0.7
+  ) +
+  
+  labs(
+    title = "Pourcentage de pertes par année",
+    x = "Année",
+    y = "Perte (%)",
+    fill = "Type de perte"
+  ) +
+  
+  theme_minimal()
+
+
+# -> faire plutot la somme dans le carré et après le pourcentage
+# -> interessant sur la résultante déprédaté
+# -> peut essayer un kde
+# -> série par groupe de 5 ans
+# -> peut projeter en retirant effet fixe pour l'intéraction '
+# -> sortir tableau et envoyer
+# -> 
+
+
+
+df_summary <- df_boxplot_pct %>%
+  group_by(Year, type_perte) %>%
+  summarise(
+    mean_perte = mean(pourcentage_perte, na.rm = TRUE),
+    q25 = quantile(pourcentage_perte, 0.25, na.rm = TRUE),
+    q75 = quantile(pourcentage_perte, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(df_summary,
+       aes(x = Year,
+           y = mean_perte,
+           color = type_perte)) +
+  
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  
+  geom_ribbon(
+    aes(ymin = q25, ymax = q75, fill = type_perte),
+    alpha = 0.15,
+    color = NA
+  ) +
+  
+  theme_minimal() +
+  labs(
+    x = "Année",
+    y = "Perte moyenne (%)",
+    color = "Scénario",
+    fill = "Scénario"
+  )
+
+
+
+
+
+map = terra::rast(here(path_rast_bathy, 'ras_pecheker_interpol_tot.tif'))
+
+
+map_grid_m <- terra::project(map, "EPSG:32743")
+print(map_grid_m)
+
+res <- 10000
+
+template <- rast(
+  ext = ext(map_grid_m),
+  resolution = res,
+  crs = crs(map_grid_m)
+)
+
+origin(template) <- origin(map_grid_m)
+print(template)
+cellSize(template)
+
+map_grid_1km <- resample(map_grid_m, template, method = resampling_method)
+print(map_grid_1km)
+
+
+r_id <- rast(map_grid_1km)
+values(r_id) <- 1:ncell(r_id)
+
+df_station_predictions <- df_station_predictions %>%
+  mutate(
+    X = X*1000 ,
+    Y = Y *1000
+  )
+df_station_predictions <- df_station_predictions %>%
+  mutate(
+    perte_totale_pct =
+      100 * (pred_sans_dep - pred_modele) / pred_sans_dep)
+
+pts <- vect(df_station_predictions, geom = c("X", "Y"), crs = crs(map_grid_1km))
+
+df_station_predictions$cell_id <- extract(r_id, pts)[,2]
+sum(is.na(df_station_predictions$cell_id))
+loss_grid <- df_station_predictions %>%
+  group_by(cell_id) %>%
+  summarise(
+    perte_totale_pct_mean = mean(perte_totale_pct, na.rm = TRUE)
+  )
+grid_df <- as.data.frame(r_id, xy = TRUE)
+names(grid_df)[3] <- "cell_id"
+grid_final <- grid_df %>%
+  left_join(loss_grid, by = "cell_id")
+
+
+ggplot(grid_final) +
+  geom_raster(aes(x = x, y = y, fill = perte_totale_pct_mean)) +
+  scale_fill_viridis_c(na.value = "transparent") +
+  coord_equal() +
+  coord_cartesian(
+    xlim = c(0,1000000),
+    #ylim = c(4505000, 4700000)
+  )
+
+
+
 

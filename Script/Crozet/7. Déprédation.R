@@ -264,11 +264,10 @@ m_season_varying_1 <- sdmTMB(
   spatiotemporal = "iid"
 )
 
-
+#enlever mois puis peut etre ensuite trouver biblio pour justifier (periode ou ils ont plus faim etc)
 m_season_varying_2 <- sdmTMB(
   ScanWeightKg ~ s(Year) + 
-    s(Month, bs = "cc") + s(NB_MEAN_ORQUE, Month) +
-    s(NB_MEAN_CACHALOT, Month) +
+    s(Month, bs = "cc")  +
     cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
@@ -292,12 +291,13 @@ AIC(m_season_varying_2) # -> le modèle ne converge pas
 
 
 #Visualitation des effets
-
-visreg(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
-visreg(m_season_varying_1, xvar = "NB_MEAN_ORQUE", gg = TRUE)
-visreg(m_season_varying_1, xvar = "Month", gg = TRUE)
-visreg2d(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
-visreg2d(m_season_varying_1, xvar = "NB_MEAN_ORQUE", yvar = "Month", plot.type = "image")
+visreg(m_season_varying_2, xvar = "cachalot_obs", gg = TRUE)
+visreg(m_season_varying_2, xvar = "orque_obs", gg = TRUE)
+visreg(m_season_varying_2, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
+visreg(m_season_varying_2, xvar = "NB_MEAN_ORQUE", gg = TRUE)
+visreg(m_season_varying_2, xvar = "Month", gg = TRUE)
+visreg2d(m_season_varying_2, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
+visreg2d(m_season_varying_2, xvar = "NB_MEAN_ORQUE", yvar = "Month", plot.type = "image")
 visreg2d(m_season_varying_2, xvar = "NB_MEAN_CACHALOT", yvar = "NB_MEAN_ORQUE", plot.type = "image")
 
 
@@ -697,7 +697,7 @@ dat_pred_dep <- dat_pos %>%
   )
 
 pred_dep <- predict(
-  m_season_varying_1,
+  m_season_varying_2,
   newdata = dat_pred_dep,
   return_tmb_object = TRUE
 )
@@ -719,7 +719,7 @@ dat_pred_nodep <- dat_pos %>%
   )
 
 pred_nodep <- predict(
-  m_season_varying_1,
+  m_season_varying_2,
   newdata = dat_pred_nodep,
   return_tmb_object = TRUE
 )
@@ -792,7 +792,7 @@ index_loss_year <- index_dep_year %>%
     suffix = c("_dep", "_nodep")
   ) %>%
   mutate(
-    perte_pct = 100 * (est_nodep - est_dep) / est_nodep
+    perte_pct = est_nodep - est_dep
   )
 
 ggplot(index_loss_year, aes(x = Year, y = perte_pct)) +
@@ -801,7 +801,7 @@ ggplot(index_loss_year, aes(x = Year, y = perte_pct)) +
   theme_bw() +
   labs(
     x = "Année",
-    y = "% de biomasse déprédatée",
+    y = "Biomasse déprédatée",
     title = "Impact annuel de la déprédation"
   )
 
@@ -816,62 +816,314 @@ ggplot(index_loss_year, aes(x = Year, y = perte_pct)) +
 
 
 
+
 #Calcul des pertes par station
+# =========================
+# Prédictions par station
+# =========================
 
-dat_pred_dep <- dat_pos %>%
-  mutate(
-    NB_MEAN_CACHALOT = NB_MEAN_CACHALOT,
-    NB_MEAN_ORQUE = NB_MEAN_ORQUE
-  )
 
-dat_pred_nodep <- dat_pos %>%
+
+# 2. Jeux de données pour les scénarios
+# -------------------------------------
+
+# Situation réelle (avec déprédation observée)
+dat_reel <- dat_pos
+
+# Sans aucune déprédation
+dat_sans_dep <- dat_pos %>%
   mutate(
     NB_MEAN_CACHALOT = 0,
     NB_MEAN_ORQUE = 0
   )
 
-offset_dep <- log(0.246 * dat_pred_dep$nb_ham)
-offset_nodep <- log(0.246 * dat_pred_nodep$nb_ham)
-
-pred_dep <- predict(
-  m_season_varying_1,
-  newdata = dat_pred_dep,
-  offset = offset_dep
-)
-
-pred_nodep <- predict(
-  m_season_varying_1,
-  newdata = dat_pred_nodep,
-  offset = offset_nodep
-)
-
-
-df_dep <- dat_pred_dep %>%
-  select(StationID, Year) %>%
-  mutate(est_dep = pred_dep$est)
-
-df_nodep <- dat_pred_nodep %>%
-  select(StationID, Year) %>%
-  mutate(est_nodep = pred_nodep$est)
-
-df_compare <- dat_pos %>%
-  select(StationID, Year) %>%
-  left_join(df_dep, by = c("StationID", "Year")) %>%
-  left_join(df_nodep, by = c("StationID", "Year")) %>%
+# Sans orques uniquement
+dat_sans_orque <- dat_pos %>%
   mutate(
-    perte_abs = est_nodep - est_dep,
-    perte_pct = 100 * (est_nodep - est_dep) / est_nodep
+    NB_MEAN_ORQUE = 0
   )
 
+# Sans cachalots uniquement
+dat_sans_cachalot <- dat_pos %>%
+  mutate(
+    NB_MEAN_CACHALOT = 0
+  )
 
-perte_station <- df_compare %>%
-  distinct(StationID, Year, .keep_all = TRUE)
+# 3. Offsets
+# ----------
+offset_reel <- log(0.246 * dat_reel$nb_ham)
+offset_sans_dep <- log(0.246 * dat_sans_dep$nb_ham)
+offset_sans_orque <- log(0.246 * dat_sans_orque$nb_ham)
+offset_sans_cachalot <- log(0.246 * dat_sans_cachalot$nb_ham)
 
-ggplot(df_compare, aes(x = Year, y = perte_pct, group = Year)) +
-  geom_boxplot() +
-  theme_bw() +
+# 4. Prédictions du modèle
+# ------------------------
+
+pred_reel <- predict(
+  m_season_varying_2,
+  newdata = dat_reel,
+  offset = offset_reel,  # si on veut une CPUE en sortie
+  type = "response"
+  )
+
+pred_sans_dep <- predict(
+  m_season_varying_2,
+  newdata = dat_sans_dep,
+  offset = offset_sans_dep,
+  type = "response"
+)
+
+pred_sans_orque <- predict(
+  m_season_varying_2,
+  newdata = dat_sans_orque,
+  offset = offset_sans_orque,
+  type = "response"
+)
+
+pred_sans_cachalot <- predict(
+  m_season_varying_2,
+  newdata = dat_sans_cachalot,
+  offset = offset_sans_cachalot,
+  type = "response"
+)
+
+# 5. Dataframe final
+# ------------------
+
+df_station_predictions <- dat_pos %>%
+  mutate(
+    poids_reel = ScanWeightKg,
+    
+    pred_modele = pred_reel$est,
+    
+    pred_sans_dep = pred_sans_dep$est,
+    
+    pred_sans_orque = pred_sans_orque$est,
+    
+    pred_sans_cachalot = pred_sans_cachalot$est,
+    
+    perte_totale = pred_sans_dep - pred_modele,
+    
+    perte_orque = pred_sans_orque - pred_modele,
+    
+    perte_cachalot = pred_sans_cachalot - pred_modele
+  ) %>%
+  select(
+    StationID,
+    Year,
+    Month,
+    ScanWeightKg,
+    nb_ham,
+    NB_MEAN_CACHALOT,
+    NB_MEAN_ORQUE,
+    X,
+    Y,
+    cachalot_obs,
+    orque_obs,
+    poids_reel,
+    pred_modele,
+    pred_sans_dep,
+    pred_sans_orque,
+    pred_sans_cachalot,
+    perte_totale,
+    perte_orque,
+    perte_cachalot
+  )
+
+# Résultat
+head(df_station_predictions)
+
+saveRDS(df_station_predictions,
+        "prediction_depredation_crozet.rds")
+
+# Création des pourcentages
+df_boxplot_pct <- df_station_predictions %>%
+  mutate(
+    perte_totale_pct =
+      100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
+    
+    perte_orque_pct =
+      100 * perte_orque / pred_sans_dep,
+    
+    perte_cachalot_pct =
+      100 * perte_cachalot / pred_sans_dep
+  ) %>%
+  
+  select(
+    Year,
+    perte_totale_pct,
+    perte_orque_pct,
+    perte_cachalot_pct
+  ) %>%
+  
+  pivot_longer(
+    cols = -Year,
+    names_to = "type_perte",
+    values_to = "pourcentage_perte"
+  ) %>%
+  
+  mutate(
+    type_perte = recode(
+      type_perte,
+      perte_totale_pct = "Déprédation totale",
+      perte_orque_pct = "Perte orques",
+      perte_cachalot_pct = "Perte cachalots"
+    )
+  )
+
+# Boxplots
+ggplot(df_boxplot_pct,
+       aes(x = factor(Year),
+           y = pourcentage_perte,
+           fill = type_perte)) +
+  
+  geom_boxplot(
+    position = position_dodge(width = 0.8),
+    alpha = 0.7
+  ) +
+  
+  labs(
+    title = "Pourcentage de pertes par année",
+    x = "Année",
+    y = "Perte (%)",
+    fill = "Type de perte"
+  ) +
+  
+  theme_minimal()
+
+
+# -> faire plutot la somme dans le carré et après le pourcentage
+# -> interessant sur la résultante déprédaté
+# -> peut essayer un kde
+# -> série par groupe de 5 ans
+# -> peut projeter en retirant effet fixe pour l'intéraction '
+# -> sortir tableau et envoyer
+# -> 
+
+
+
+df_summary <- df_boxplot_pct %>%
+  group_by(Year, type_perte) %>%
+  summarise(
+    mean_perte = mean(pourcentage_perte, na.rm = TRUE),
+    q25 = quantile(pourcentage_perte, 0.25, na.rm = TRUE),
+    q75 = quantile(pourcentage_perte, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(df_summary,
+       aes(x = Year,
+           y = mean_perte,
+           color = type_perte)) +
+  
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2) +
+  
+  geom_ribbon(
+    aes(ymin = q25, ymax = q75, fill = type_perte),
+    alpha = 0.15,
+    color = NA
+  ) +
+  
+  theme_minimal() +
   labs(
     x = "Année",
-    y = "% de perte",
-    title = "Distribution annuelle de l’impact de la déprédation"
+    y = "Perte moyenne (%)",
+    color = "Scénario",
+    fill = "Scénario"
   )
+
+
+
+
+
+map = terra::rast(here(path_rast_bathy, 'ras_pecheker_interpol_totCRO.tif'))
+
+
+map_grid_m <- terra::project(map, "EPSG:32743")
+print(map_grid_m)
+
+res <- 10000
+
+template <- rast(
+  ext = ext(map_grid_m),
+  resolution = res,
+  crs = crs(map_grid_m)
+)
+
+origin(template) <- origin(map_grid_m)
+print(template)
+cellSize(template)
+
+map_grid_1km <- resample(map_grid_m, template, method = resampling_method)
+print(map_grid_1km)
+
+
+r_id <- rast(map_grid_1km)
+values(r_id) <- 1:ncell(r_id)
+
+df_station_predictions <- df_station_predictions %>%
+  mutate(
+    X = X*1000 ,
+    Y = Y *1000
+  )
+df_station_predictions <- df_station_predictions %>%
+  mutate(
+    perte_totale_pct =
+      100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
+    
+    perte_orque_pct =
+      100 * perte_orque / pred_sans_dep,
+    
+    perte_cachalot_pct =
+      100 * perte_cachalot / pred_sans_dep
+  )
+
+pts <- vect(df_station_predictions, geom = c("X", "Y"), crs = crs(map_grid_1km))
+
+df_station_predictions$cell_id <- extract(r_id, pts)[,2]
+sum(is.na(df_station_predictions$cell_id))
+loss_grid <- df_station_predictions %>%
+  group_by(cell_id) %>%
+  summarise(
+    perte_totale_pct_mean = mean(perte_totale_pct, na.rm = TRUE),
+    perte_orque_pct_mean = mean(perte_orque_pct, na.rm = TRUE),
+    perte_cachalot_pct_mean = mean(perte_cachalot_pct, na.rm = TRUE)
+  )
+grid_df <- as.data.frame(r_id, xy = TRUE)
+names(grid_df)[3] <- "cell_id"
+grid_final <- grid_df %>%
+  left_join(loss_grid, by = "cell_id")
+
+
+ggplot(grid_final) +
+  geom_raster(aes(x = x, y = y, fill = perte_totale_pct_mean)) +
+  scale_fill_viridis_c(na.value = "transparent") +
+  coord_equal() +
+  coord_cartesian(
+    xlim = c(-1550000, -1150000),
+    ylim = c(4505000, 4700000)
+  )
+
+
+
+ggplot(grid_final) +
+  geom_raster(aes(x = x, y = y, fill = perte_cachalot_pct_mean)) +
+  scale_fill_viridis_c(na.value = "transparent") +
+  coord_equal() +
+  coord_cartesian(
+    xlim = c(-1550000, -1150000),
+    ylim = c(4505000, 4700000)
+  )
+
+
+
+ggplot(grid_final) +
+  geom_raster(aes(x = x, y = y, fill = perte_orque_pct_mean)) +
+  scale_fill_viridis_c(na.value = "transparent") +
+  coord_equal() +
+  coord_cartesian(
+    xlim = c(-1550000, -1150000),
+    ylim = c(4505000, 4700000)
+  )
+
