@@ -1263,29 +1263,39 @@ pred_std <- predict(
 
 index <- get_index(pred_std, bias_correct = TRUE)
 
-index <- get_index(pred_std, bias_correct = FALSE)
-
-
-
-
-ref <- index_periode_2$mean_index[
-  index_periode_2$periode == "2019-2020"
-]
-
-index_periode_2 <- index_periode_2 %>%
-  mutate(
-    index_rel = 100 * mean_index / ref,
-    pct_change = 100 * (mean_index / ref - 1)
+index %>%
+  filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
+  ggplot(aes(x = TAAFseason, y = est)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = lwr, ymax = upr),
+    width = 0.2
+  ) +
+  scale_x_continuous(breaks = 2010:2025) +
+  labs(
+    x = "Saison",
+    y = "Indice standardisé",
+    title = "Évolution de l'indice (2010–2025)"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
-ggplot(index_periode_2,
-       aes(x = periode, y = mean_index)) +
-  geom_point(size = 3) +
-  geom_errorbar(
-    aes(ymin = IC_inf, ymax = IC_sup),
-    width = 0.15
+
+ggplot(
+  filter(index, TAAFseason >= 2010, TAAFseason <= 2025),
+  aes(TAAFseason, est)
+) +
+  geom_ribbon(
+    aes(ymin = lwr, ymax = upr),
+    alpha = 0.2
   ) +
-  theme_classic() +
-  labs(x = "", y = "Indice moyen")
-
-
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  theme_bw() +
+  labs(
+    x = "Saison",
+    y = "Indice standardisé"
+  )
