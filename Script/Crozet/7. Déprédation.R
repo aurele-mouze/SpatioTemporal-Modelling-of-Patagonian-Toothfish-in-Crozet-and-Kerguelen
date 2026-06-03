@@ -288,7 +288,7 @@ AIC(m_season_varying_2) # -> le modèle ne converge pas
 
 
 
-
+library(visreg)
 
 #Visualitation des effets
 visreg(m_season_varying_2, xvar = "cachalot_obs", gg = TRUE)
@@ -1043,7 +1043,7 @@ map = terra::rast(here(path_rast_bathy, 'ras_pecheker_interpol_totCRO.tif'))
 map_grid_m <- terra::project(map, "EPSG:32743")
 print(map_grid_m)
 
-res <- 10000
+res <- 5000
 
 template <- rast(
   ext = ext(map_grid_m),
@@ -1067,17 +1067,17 @@ df_station_predictions <- df_station_predictions %>%
     X = X*1000 ,
     Y = Y *1000
   )
-df_station_predictions <- df_station_predictions %>%
-  mutate(
-    perte_totale_pct =
-      100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
-    
-    perte_orque_pct =
-      100 * perte_orque / pred_sans_dep,
-    
-    perte_cachalot_pct =
-      100 * perte_cachalot / pred_sans_dep
-  )
+# df_station_predictions <- df_station_predictions %>%
+#   mutate(
+#     perte_totale_pct =
+#       100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
+#     
+#     perte_orque_pct =
+#       100 * perte_orque / pred_sans_dep,
+#     
+#     perte_cachalot_pct =
+#       100 * perte_cachalot / pred_sans_dep
+#   )
 
 pts <- vect(df_station_predictions, geom = c("X", "Y"), crs = crs(map_grid_1km))
 
@@ -1086,9 +1086,9 @@ sum(is.na(df_station_predictions$cell_id))
 loss_grid <- df_station_predictions %>%
   group_by(cell_id) %>%
   summarise(
-    perte_totale_pct_mean = mean(perte_totale_pct, na.rm = TRUE),
-    perte_orque_pct_mean = mean(perte_orque_pct, na.rm = TRUE),
-    perte_cachalot_pct_mean = mean(perte_cachalot_pct, na.rm = TRUE)
+    perte_totale_pct_mean = 100*sum(perte_totale, na.rm = TRUE)/sum(pred_sans_dep, na.rm = TRUE),
+    perte_orque_pct_mean = 100*sum(perte_orque, na.rm = TRUE)/sum(pred_sans_dep, na.rm = TRUE),
+    perte_cachalot_pct_mean = 100*sum(perte_cachalot, na.rm = TRUE)/sum(pred_sans_dep, na.rm = TRUE)
   )
 grid_df <- as.data.frame(r_id, xy = TRUE)
 names(grid_df)[3] <- "cell_id"
@@ -1126,4 +1126,178 @@ ggplot(grid_final) +
     xlim = c(-1550000, -1150000),
     ylim = c(4505000, 4700000)
   )
+
+
+
+
+
+
+
+#Calcul des CPUE par périodes, comparaison pour observer la baisse
+
+nb_ham_std <- 1
+offset_std <- log(nb_ham_std * 0.246)
+
+pred_std <- predict(
+  m_season_varying_2,
+  newdata = dat_pos,
+  offset = rep(offset_std, nrow(dat_pos)),
+  type = "response"
+)
+
+dat_pos$CPUE_std <- pred_std$est * 1000
+
+
+dat_pos <- dat_pos %>%
+  mutate(
+    periode = case_when(
+      Year %in% c(2021, 2022) ~ "2021-2022",
+      Year %in% c(2022, 2023) ~ "2022-2023",
+      Year %in% c(2023, 2024) ~ "2023-2024",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+cpue_period <- dat_pos %>%
+  filter(!is.na(periode)) %>%
+  group_by(periode) %>%
+  summarise(
+    n = n(),
+    mean_cpue = mean(CPUE_std, na.rm = TRUE),
+    sd_cpue = sd(CPUE_std, na.rm = TRUE),
+    se = sd_cpue / sqrt(n),
+    IC_inf = mean_cpue - qt(0.975, df = n - 1) * se,
+    IC_sup = mean_cpue + qt(0.975, df = n - 1) * se,
+    .groups = "drop"
+  )
+
+
+ggplot(cpue_period, aes(x = periode, y = mean_cpue)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = IC_inf, ymax = IC_sup), width = 0.15) +
+  theme_classic() +
+  labs(x = "", y = "CPUE standardisée (moyenne)")
+
+
+ref <- cpue_period$mean_cpue[cpue_period$periode == "2021-2022"]
+
+cpue_period <- cpue_period %>%
+  mutate(
+    index_rel = 100 * mean_cpue / ref,
+    pct_change = 100 * (mean_cpue / ref - 1)
+  )
+
+
+
+
+#6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
+# Import et préparation de la grille d’extrapolation spatiale
+Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapolCRO.rds"))
+
+# Mise à l’échelle de la profondeur et de la pente sur la grille
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))
+Extrapol_grid = Extrapol_grid %>% rename(depth = profondeur.pred)
+Extrapol_grid <- Extrapol_grid %>% mutate(depth_scaled = (depth - Mean_SD$Mean) / Mean_SD$SD)
+
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(slope), SD = sd(slope))
+Extrapol_grid <- Extrapol_grid %>% mutate(slope_scaled = (slope - Mean_SD$Mean) / Mean_SD$SD)
+
+# Nettoyage et sélection des colonnes nécessaires pour la prédiction
+grid <- Extrapol_grid %>%
+  mutate(
+    nb_ham = nb_ham,
+    tps_h = mean(dat$tps_h),
+    x = x / 1000 ,
+    y = y / 1000 
+  ) %>%
+  filter(!is.na(slope_scaled)) %>%
+  filter(!is.na(depth_scaled)) %>%
+  filter(depth > min_depth) %>%
+  rename(X = x, Y = y) %>%
+  dplyr::select(depth_scaled, slope_scaled, slope, depth, nb_ham, tps_h, X, Y) %>%
+  rename(prof_bathy = depth)
+
+
+#7. Prédictions -----------------------------------
+
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+month <- sort(unique(dat_pos$Month))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)*length(month)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id)*length(month)),
+         Month = rep(month, times = nrow(grid_with_id)*length(years))) %>%
+  mutate(cachalot_obs = 1,
+         orque_obs = 1,
+         nb_ham = 1,
+         NB_MEAN_CACHALOT = 0,
+         NB_MEAN_ORQUE = 0) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+
+pred_std <- predict(
+  m_season_varying_2,
+  newdata = grid_all_years,
+  offset = log(grid_all_years$nb_ham * 0.246),
+  return_tmb_object = TRUE
+)
+
+
+index <- get_index(pred_std, bias_correct = TRUE)
+
+index_periode_2 <- index %>%
+  mutate(
+    periode = case_when(
+      Year %in% c(2021, 2022) ~ "2021-2022",
+      Year %in% c(2022, 2023) ~ "2022-2023",
+      Year %in% c(2023, 2024) ~ "2023-2024",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(periode)) %>%
+  group_by(periode) %>%
+  summarise(
+    mean_index = mean(est),
+    IC_inf = mean(lwr),
+    IC_sup = mean(upr),
+    .groups = "drop"
+  )
+
+
+ref <- index_periode_2$mean_index[
+  index_periode_2$periode == "2021-2022"
+]
+
+index_periode_2 <- index_periode_2 %>%
+  mutate(
+    index_rel = 100 * mean_index / ref,
+    pct_change = 100 * (mean_index / ref - 1)
+  )
+
+ggplot(index_periode_2,
+       aes(x = periode, y = mean_index)) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = IC_inf, ymax = IC_sup),
+    width = 0.15
+  ) +
+  theme_classic() +
+  labs(x = "", y = "Indice moyen")
+
 

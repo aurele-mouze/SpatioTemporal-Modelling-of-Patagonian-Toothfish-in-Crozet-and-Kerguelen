@@ -188,7 +188,7 @@ dat_pos <- dat_pos %>%
 
 
 dat_pos <- dat_pos %>%
-  filter(!Year %in% c(2002, 2025))
+  filter(!Year %in% c(2002))
 
 dat_pos <- dat_pos %>%
   filter(
@@ -237,10 +237,37 @@ ggplot(st_drop_geometry(dat_pos), aes(x = factor(NB_MEAN_CACHALOT), y = CPUE)) +
   )
 
 
+res <- dat_pos %>%
+  mutate(groupe = case_when(
+    Year %in% c(2021, 2022) ~ "2021-2022",
+    Year %in% c(2024, 2025) ~ "2024-2025"
+  )) %>%
+  filter(!is.na(groupe)) %>%
+  group_by(groupe) %>%
+  summarise(
+    n = n(),
+    mean_cpue = mean(CPUE, na.rm = TRUE),
+    sd_cpue = sd(CPUE, na.rm = TRUE),
+    se = sd_cpue / sqrt(n),
+    IC_inf = mean_cpue - qt(0.975, n - 1) * se,
+    IC_sup = mean_cpue + qt(0.975, n - 1) * se,
+    .groups = "drop"
+  )
+
+ggplot(res, aes(x = groupe, y = mean_cpue)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = IC_inf, ymax = IC_sup),
+                width = 0.15) +
+  labs(x = "", y = "CPUE moyenne") +
+  theme_classic()
 
 
+mean_2122 <- res$mean_cpue[res$groupe == "2021-2022"]
+mean_2024 <- res$mean_cpue[res$groupe == "2024-2025"]
 
+baisse_pct <- (mean_2122 - mean_2024) / mean_2122 * 100
 
+baisse_pct
 
 
 

@@ -539,3 +539,119 @@ ggplot(grid_final) +
 
 
 
+
+#Calcul des CPUE par périodes, comparaison pour observer la baisse
+
+nb_ham_std <- 1
+offset_std <- log(nb_ham_std * 0.246)
+
+pred_std <- predict(
+  m_season_varying_1,
+  newdata = dat_pos,
+  offset = rep(offset_std, nrow(dat_pos)),
+  type = "response"
+)
+
+dat_pos$CPUE_std <- pred_std$est * 1000
+
+
+dat_pos <- dat_pos %>%
+  mutate(
+    periode = case_when(
+      Year %in% c(2021, 2022) ~ "2021-2022",
+      Year %in% c(2022, 2023) ~ "2022-2023",
+      Year %in% c(2023, 2024) ~ "2023-2024",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+cpue_period_2 <- dat_pos %>%
+  filter(!is.na(periode)) %>%
+  group_by(periode) %>%
+  summarise(
+    n = n(),
+    mean_cpue = mean(CPUE_std, na.rm = TRUE),
+    sd_cpue = sd(CPUE_std, na.rm = TRUE),
+    se = sd_cpue / sqrt(n),
+    IC_inf = mean_cpue - qt(0.975, df = n - 1) * se,
+    IC_sup = mean_cpue + qt(0.975, df = n - 1) * se,
+    .groups = "drop"
+  )
+
+
+ggplot(cpue_period_2, aes(x = periode, y = mean_cpue)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = IC_inf, ymax = IC_sup), width = 0.15) +
+  theme_classic() +
+  labs(x = "", y = "CPUE standardisée (moyenne)")
+
+
+ref <- cpue_period_2$mean_cpue[cpue_period_2$periode == "2021-2022"]
+
+cpue_period_2 <- cpue_period_2 %>%
+  mutate(
+    index_rel = 100 * mean_cpue / ref,
+    pct_change = 100 * (mean_cpue / ref - 1)
+  )
+
+
+
+
+
+
+dat_std <- dat_pos
+dat_std$nb_ham <- 1
+dat_std$offset <- log(1 * 0.246)
+
+pred_std <- predict(
+  m_season_varying_1,
+  newdata = dat_std,
+  offset = dat_std$offset,
+  return_tmb_object = TRUE
+)
+
+
+index <- get_index(pred_std, bias_correct = TRUE)
+
+index_periode <- index %>%
+  mutate(
+    periode = case_when(
+      Year %in% c(2021, 2022) ~ "2021-2022",
+      Year %in% c(2022, 2023) ~ "2022-2023",
+      Year %in% c(2023, 2024) ~ "2023-2024",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(periode)) %>%
+  group_by(periode) %>%
+  summarise(
+    mean_index = mean(est),
+    IC_inf = mean(lwr),
+    IC_sup = mean(upr),
+    .groups = "drop"
+  )
+
+
+ref <- index_periode$mean_index[
+  index_periode$periode == "2021-2022"
+]
+
+index_periode <- index_periode %>%
+  mutate(
+    index_rel = 100 * mean_index / ref,
+    pct_change = 100 * (mean_index / ref - 1)
+  )
+
+ggplot(index_periode,
+       aes(x = periode, y = mean_index)) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(ymin = IC_inf, ymax = IC_sup),
+    width = 0.15
+  ) +
+  theme_classic() +
+  labs(x = "", y = "Indice moyen")
+
+
+
