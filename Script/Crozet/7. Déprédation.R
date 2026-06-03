@@ -88,13 +88,12 @@ q95 <- quantile(dat_pos$CPUE, 0.95, na.rm = TRUE)
 dat_pos <- dat_pos %>%
   mutate(CPUE = pmin(CPUE, q95))
 
-
 dat_pos <- dat_pos %>%
   mutate(
     NB_MEAN_CACHALOT = case_when(
-      !is.na(NB_MIN_CACHALOT) & !is.na(NB_MAX_CACHALOT) ~ (NB_MIN_CACHALOT + NB_MAX_CACHALOT) / 2,
-      is.na(NB_MIN_CACHALOT) & !is.na(NB_MAX_CACHALOT) ~ NB_MAX_CACHALOT,
-      !is.na(NB_MIN_CACHALOT) & is.na(NB_MAX_CACHALOT) ~ NB_MIN_CACHALOT,
+      !is.na(nb_min_cachalot) & !is.na(nb_max_cachalot) ~ (nb_min_cachalot + nb_max_cachalot) / 2,
+      is.na(nb_min_cachalot) & !is.na(nb_max_cachalot) ~ nb_max_cachalot,
+      !is.na(nb_min_cachalot) & is.na(nb_max_cachalot) ~ nb_min_cachalot,
       TRUE ~ NA_real_
     )
   )
@@ -102,9 +101,9 @@ dat_pos <- dat_pos %>%
 dat_pos <- dat_pos %>%
   mutate(
     NB_MEAN_ORQUE = case_when(
-      !is.na(NB_MIN_ORQUE) & !is.na(NB_MAX_ORQUE) ~ (NB_MIN_ORQUE + NB_MAX_ORQUE) / 2,
-      is.na(NB_MIN_ORQUE) & !is.na(NB_MAX_ORQUE) ~ NB_MAX_ORQUE,
-      !is.na(NB_MIN_ORQUE) & is.na(NB_MAX_ORQUE) ~ NB_MIN_ORQUE,
+      !is.na(nb_min_orque) & !is.na(nb_max_orque) ~ (nb_min_orque + nb_max_orque) / 2,
+      is.na(nb_min_orque) & !is.na(nb_max_orque) ~ nb_max_orque,
+      !is.na(nb_min_orque) & is.na(nb_max_orque) ~ nb_min_orque,
       TRUE ~ NA_real_
     )
   )
@@ -112,22 +111,24 @@ dat_pos <- dat_pos %>%
 dat_pos <- dat_pos %>%
   mutate(
     # indicateur d'observation
-    cachalot_obs = as.integer(PRES_CACHALOT != "non obsé"),
-    orque_obs = as.integer(PRES_ORQUE != "non obsé"),
+    cachalot_obs = as.integer(pres_cachalot != "non obsé"),
+    orque_obs = as.integer(pres_orque != "non obsé"),
     
     # remplacer NA uniquement quand non observé
-    NB_MEAN_CACHALOT = ifelse(PRES_CACHALOT == "non obsé", 0, NB_MEAN_CACHALOT),
-    NB_MEAN_ORQUE = ifelse(PRES_ORQUE == "non obsé", 0, NB_MEAN_ORQUE)
+    NB_MEAN_CACHALOT = ifelse(pres_cachalot == "non obsé", 0, NB_MEAN_CACHALOT),
+    NB_MEAN_ORQUE = ifelse(pres_orque == "non obsé", 0, NB_MEAN_ORQUE)
   )
 
 
 dat_pos <- dat_pos %>%
-  filter(!Year %in% c(2002, 2025))
+  filter(
+    !TAAFseason %in%  2026
+  )
 
 dat_pos <- dat_pos %>%
   filter(
-    !is.na(PRES_CACHALOT),
-    !is.na(PRES_ORQUE)
+    !is.na(pres_cachalot),
+    !is.na(pres_orque)
   )
 
 dat_pos <- dat_pos %>%
@@ -135,6 +136,8 @@ dat_pos <- dat_pos %>%
     !is.na(NB_MEAN_CACHALOT),
     !is.na(NB_MEAN_ORQUE)
   )
+
+
 
 # 4. Mesh -----------------------------------------------------------------
 
@@ -266,7 +269,7 @@ m_season_varying_1 <- sdmTMB(
 
 #enlever mois puis peut etre ensuite trouver biblio pour justifier (periode ou ils ont plus faim etc)
 m_season_varying_2 <- sdmTMB(
-  ScanWeightKg ~ s(Year) + 
+  ScanWeightKg ~ s(TAAFseason) + 
     s(Month, bs = "cc")  +
     cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
   offset = log(dat_pos$nb_ham * 0.246),
@@ -274,7 +277,7 @@ m_season_varying_2 <- sdmTMB(
   mesh = bspde_pos,
   family = Gamma(link = "log"),
   spatial = "on",
-  time = "Year",
+  time = "TAAFseason",
   spatiotemporal = "iid"
 )
 
@@ -1222,8 +1225,8 @@ grid <- Extrapol_grid %>%
 #7. Prédictions -----------------------------------
 
 # Vérifications rapides
-stopifnot("Year" %in% names(dat_pos))
-stopifnot(is.numeric(dat_pos$Year))
+stopifnot("TAAFseason" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$TAAFseason))
 
 #Préparer grid avec un identifiant de cellule
 grid_with_id <- grid %>%
@@ -1232,13 +1235,12 @@ grid_with_id <- grid %>%
 grid_with_id <- dplyr::as_tibble(grid_with_id)
 
 #Réplication temporelle : une ligne par cellule × année
-years <- sort(unique(dat_pos$Year))
-month <- sort(unique(dat_pos$Month))
+years <- sort(unique(dat_pos$TAAFseason))
 grid_all_years <- grid_with_id %>%
   tidyr::uncount(length(years)*length(month)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id)*length(month)),
-         Month = rep(month, times = nrow(grid_with_id)*length(years))) %>%
+  mutate(TAAFseason = rep(years, times = nrow(grid_with_id)*length(month))) %>%
   mutate(cachalot_obs = 1,
+         Month = 2,
          orque_obs = 1,
          nb_ham = 1,
          NB_MEAN_CACHALOT = 0,
@@ -1246,7 +1248,7 @@ grid_all_years <- grid_with_id %>%
   relocate(cell_id)
 
 #Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
+required_cols <- c("prof_bathy", "TAAFseason", "X", "Y")
 missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
@@ -1261,27 +1263,13 @@ pred_std <- predict(
 
 index <- get_index(pred_std, bias_correct = TRUE)
 
-index_periode_2 <- index %>%
-  mutate(
-    periode = case_when(
-      Year %in% c(2021, 2022) ~ "2021-2022",
-      Year %in% c(2022, 2023) ~ "2022-2023",
-      Year %in% c(2023, 2024) ~ "2023-2024",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  filter(!is.na(periode)) %>%
-  group_by(periode) %>%
-  summarise(
-    mean_index = mean(est),
-    IC_inf = mean(lwr),
-    IC_sup = mean(upr),
-    .groups = "drop"
-  )
+index <- get_index(pred_std, bias_correct = FALSE)
+
+
 
 
 ref <- index_periode_2$mean_index[
-  index_periode_2$periode == "2021-2022"
+  index_periode_2$periode == "2019-2020"
 ]
 
 index_periode_2 <- index_periode_2 %>%

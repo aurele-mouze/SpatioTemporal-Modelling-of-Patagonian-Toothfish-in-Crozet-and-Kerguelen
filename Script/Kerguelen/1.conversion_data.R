@@ -4,7 +4,7 @@
 biometrie <- readRDS("Data/biometrie.rds")
 capture <- readRDS("Data/capture_Agg.rds")
 Station <- readRDS("Data/Station.rds")
-Depredation <- read_csv("Data/DepredationData2025.csv")
+Depredation <- read_csv("Data/DepredationData2026.csv")
 
 ### Fusionner les datas pour avoir 1 seul dataset----------------------------------
 
@@ -17,20 +17,20 @@ capture <- Station %>%
   )
 
 Depredation <- Depredation %>%
-  mutate(PKSTATION = as.character(PKSTATION))
+  mutate(pkstation = as.character(pkstation))
 Depredation <- Depredation %>%
-  mutate(FKCAMPAGNE = as.character(FKCAMPAGNE))
+  mutate(fkcampagne = as.character(fkcampagne))
 
 Depredation_unique <- Depredation %>%
-  distinct(PKSTATION, FKCAMPAGNE, .keep_all = TRUE)
+  distinct(pkstation, fkcampagne, .keep_all = TRUE)
 
 capture <- capture %>%
   left_join(
     Depredation_unique %>%
-      select(PKSTATION, FKCAMPAGNE, PRES_CACHALOT, PRES_ORQUE, NB_MIN_CACHALOT, NB_MAX_CACHALOT, NB_MIN_ORQUE, NB_MAX_ORQUE), 
+      select(pkstation, fkcampagne, pres_cachalot, pres_orque, nb_min_cachalot, nb_max_cachalot, nb_min_orque, nb_max_orque), 
     by = c(
-      "StationID" = "PKSTATION",
-      "CampaignID" = "FKCAMPAGNE"
+      "StationID" = "pkstation",
+      "CampaignID" = "fkcampagne"
     )
   )
 
@@ -293,6 +293,7 @@ points_mid <- points_mid %>%
 # Ajout des coordonnées et profondeur bathy
 data_modelo = left_join(data_modelo, points_mid, by = c("StationID"))
 
+
 # Ajout des données de captures (CPUE)
 data_CPUE <- data_all_cap %>%
   dplyr::select(
@@ -302,12 +303,13 @@ data_CPUE <- data_all_cap %>%
     HookHaul,
     TargetSpecies,
     HaulEndDate,
-    PRES_CACHALOT, 
-    PRES_ORQUE, 
-    NB_MIN_CACHALOT, 
-    NB_MAX_CACHALOT, 
-    NB_MIN_ORQUE, 
-    NB_MAX_ORQUE
+    pres_cachalot, 
+    pres_orque, 
+    nb_min_cachalot, 
+    nb_max_cachalot, 
+    nb_min_orque, 
+    nb_max_orque, 
+    TAAFseason
   )
 
 data_modelo = left_join(data_modelo, data_CPUE, by = c("StationID"))

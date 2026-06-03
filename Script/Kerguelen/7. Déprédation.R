@@ -62,7 +62,6 @@ dat <- sdmTMB::add_utm_columns(dat, ll_names = c("x", "y"), units = "km")  # Con
 # Création du maillage spatial pour le modèle (choix du nombre de nœuds)
 noeuds <- 120
 
-
 # Supprime les lignes avec CPUE manquante
 dat_clean <- dat %>% filter(!is.na(CPUE), !is.na(prof_bathy), !is.na(Year))
 
@@ -88,13 +87,12 @@ q95 <- quantile(dat_pos$CPUE, 0.95, na.rm = TRUE)
 dat_pos <- dat_pos %>%
   mutate(CPUE = pmin(CPUE, q95))
 
-
 dat_pos <- dat_pos %>%
   mutate(
     NB_MEAN_CACHALOT = case_when(
-      !is.na(NB_MIN_CACHALOT) & !is.na(NB_MAX_CACHALOT) ~ (NB_MIN_CACHALOT + NB_MAX_CACHALOT) / 2,
-      is.na(NB_MIN_CACHALOT) & !is.na(NB_MAX_CACHALOT) ~ NB_MAX_CACHALOT,
-      !is.na(NB_MIN_CACHALOT) & is.na(NB_MAX_CACHALOT) ~ NB_MIN_CACHALOT,
+      !is.na(nb_min_cachalot) & !is.na(nb_max_cachalot) ~ (nb_min_cachalot + nb_max_cachalot) / 2,
+      is.na(nb_min_cachalot) & !is.na(nb_max_cachalot) ~ nb_max_cachalot,
+      !is.na(nb_min_cachalot) & is.na(nb_max_cachalot) ~ nb_min_cachalot,
       TRUE ~ NA_real_
     )
   )
@@ -102,9 +100,9 @@ dat_pos <- dat_pos %>%
 dat_pos <- dat_pos %>%
   mutate(
     NB_MEAN_ORQUE = case_when(
-      !is.na(NB_MIN_ORQUE) & !is.na(NB_MAX_ORQUE) ~ (NB_MIN_ORQUE + NB_MAX_ORQUE) / 2,
-      is.na(NB_MIN_ORQUE) & !is.na(NB_MAX_ORQUE) ~ NB_MAX_ORQUE,
-      !is.na(NB_MIN_ORQUE) & is.na(NB_MAX_ORQUE) ~ NB_MIN_ORQUE,
+      !is.na(nb_min_orque) & !is.na(nb_max_orque) ~ (nb_min_orque + nb_max_orque) / 2,
+      is.na(nb_min_orque) & !is.na(nb_max_orque) ~ nb_max_orque,
+      !is.na(nb_min_orque) & is.na(nb_max_orque) ~ nb_min_orque,
       TRUE ~ NA_real_
     )
   )
@@ -112,28 +110,38 @@ dat_pos <- dat_pos %>%
 dat_pos <- dat_pos %>%
   mutate(
     # indicateur d'observation
-    cachalot_obs = as.integer(PRES_CACHALOT != "non obsé"),
-    orque_obs = as.integer(PRES_ORQUE != "non obsé"),
+    cachalot_obs = as.integer(pres_cachalot != "non obsé"),
+    orque_obs = as.integer(pres_orque != "non obsé"),
     
     # remplacer NA uniquement quand non observé
-    NB_MEAN_CACHALOT = ifelse(PRES_CACHALOT == "non obsé", 0, NB_MEAN_CACHALOT),
-    NB_MEAN_ORQUE = ifelse(PRES_ORQUE == "non obsé", 0, NB_MEAN_ORQUE)
+    NB_MEAN_CACHALOT = ifelse(pres_cachalot == "non obsé", 0, NB_MEAN_CACHALOT),
+    NB_MEAN_ORQUE = ifelse(pres_orque == "non obsé", 0, NB_MEAN_ORQUE)
   )
 
 
 dat_pos <- dat_pos %>%
-  filter(!Year %in% c(2002, 2025))
+  filter(
+    !Year %in% c(2002, 2026),
+    !(Year == 2025 & Month %in% c(10, 11, 12))
+  )
+
 
 dat_pos <- dat_pos %>%
   filter(
-    !is.na(PRES_CACHALOT),
-    !is.na(PRES_ORQUE)
+    !is.na(pres_cachalot),
+    !is.na(pres_orque)
   )
 
 dat_pos <- dat_pos %>%
   filter(
-    !is.na(NB_MEAN_CACHALOT),
-    !is.na(NB_MEAN_ORQUE)
+    !is.na(pres_cachalot),
+    !is.na(pres_orque),
+    !is.na(ScanWeightKg)
+  )
+
+dat_pos <- dat_pos %>%
+  mutate(
+    NB_MEAN_CACHALOT = ifelse(is.na(NB_MEAN_CACHALOT), 0, NB_MEAN_CACHALOT)
   )
 
 # 4. Mesh -----------------------------------------------------------------
@@ -600,26 +608,97 @@ cpue_period_2 <- cpue_period_2 %>%
 
 
 
-dat_std <- dat_pos
-dat_std$nb_ham <- 1
-dat_std$offset <- log(1 * 0.246)
-
-pred_std <- predict(
-  m_season_varying_1,
-  newdata = dat_std,
-  offset = dat_std$offset,
-  return_tmb_object = TRUE
-)
 
 
-index <- get_index(pred_std, bias_correct = TRUE)
+
+
+
+
+
+
+
+
+#6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
+# Import et préparation de la grille d’extrapolation spatiale
+Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapol.rds"))
+
+# Mise à l’échelle de la profondeur et de la pente sur la grille
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(prof_bathy), SD = sd(prof_bathy))
+Extrapol_grid = Extrapol_grid %>% rename(depth = profondeur.pred)
+Extrapol_grid <- Extrapol_grid %>% mutate(depth_scaled = (depth - Mean_SD$Mean) / Mean_SD$SD)
+
+Mean_SD <- dat_pos %>% ungroup() %>% summarise(Mean = mean(slope), SD = sd(slope))
+Extrapol_grid <- Extrapol_grid %>% mutate(slope_scaled = (slope - Mean_SD$Mean) / Mean_SD$SD)
+
+# Nettoyage et sélection des colonnes nécessaires pour la prédiction
+grid <- Extrapol_grid %>%
+  mutate(
+    nb_ham = nb_ham,
+    tps_h = mean(dat$tps_h),
+    x = x / 1000 ,
+    y = y / 1000 
+  ) %>%
+  filter(!is.na(slope_scaled)) %>%
+  filter(!is.na(depth_scaled)) %>%
+  filter(depth > min_depth) %>%
+  rename(X = x, Y = y) %>%
+  dplyr::select(depth_scaled, slope_scaled, slope, depth, nb_ham, tps_h, X, Y) %>%
+  rename(prof_bathy = depth)
+
+
+#7. Prédictions -----------------------------------
+
+# Vérifications rapides
+stopifnot("Year" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$Year))
+
+#Préparer grid avec un identifiant de cellule
+grid_with_id <- grid %>%
+  mutate(cell_id = row_number())
+
+grid_with_id <- dplyr::as_tibble(grid_with_id)
+
+#Réplication temporelle : une ligne par cellule × année
+years <- sort(unique(dat_pos$Year))
+month <- sort(unique(dat_pos$Month))
+grid_all_years <- grid_with_id %>%
+  tidyr::uncount(length(years)*length(month)) %>%
+  mutate(Year = rep(years, times = nrow(grid_with_id)*length(month)),
+         Month = rep(month, times = nrow(grid_with_id)*length(years))) %>%
+  mutate(cachalot_obs = 1,
+         nb_ham = 1,
+         NB_MEAN_CACHALOT = 0) %>%
+  relocate(cell_id)
+
+#Vérifier colonnes requises
+required_cols <- c("prof_bathy", "Year", "X", "Y")
+missing_cols <- setdiff(required_cols, names(grid_all_years))
+if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
+
+
+grid_all_years$offset <- log(grid_all_years$nb_ham * 0.246)
+# Prédiction (utilise chunking si nécessaire)
+pred_grid_raw <- predict_in_chunks(m_season_varying_1,  newdata = grid_all_years,
+                                   chunk_size = 30000)
 
 index_periode <- index %>%
   mutate(
     periode = case_when(
+      Year %in% c(2010, 2011) ~ "2010-2011",
+      Year %in% c(2011, 2012) ~ "2011-2012",
+      Year %in% c(2012, 2013) ~ "2012-2013",
+      Year %in% c(2013, 2014) ~ "2013-2014",
+      Year %in% c(2014, 2015) ~ "2014-2015",
+      Year %in% c(2015, 2016) ~ "2015-2016",
+      Year %in% c(2016, 2017) ~ "2016-2017",
+      Year %in% c(2017, 2018) ~ "2017-2018",
+      Year %in% c(2018, 2019) ~ "2018-2019",
+      Year %in% c(2019, 2020) ~ "2019-2020",
+      Year %in% c(2020, 2021) ~ "2020-2021",
       Year %in% c(2021, 2022) ~ "2021-2022",
       Year %in% c(2022, 2023) ~ "2022-2023",
       Year %in% c(2023, 2024) ~ "2023-2024",
+      Year %in% c(2024, 2025) ~ "2024-2025",
       TRUE ~ NA_character_
     )
   ) %>%
@@ -652,6 +731,5 @@ ggplot(index_periode,
   ) +
   theme_classic() +
   labs(x = "", y = "Indice moyen")
-
 
 
