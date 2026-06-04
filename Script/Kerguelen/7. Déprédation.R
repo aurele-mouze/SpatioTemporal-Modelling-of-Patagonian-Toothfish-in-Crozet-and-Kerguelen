@@ -121,8 +121,7 @@ dat_pos <- dat_pos %>%
 
 dat_pos <- dat_pos %>%
   filter(
-    !Year %in% c(2002, 2026),
-    !(Year == 2025 & Month %in% c(10, 11, 12))
+    !TAAFseason %in%  2026
   )
 
 
@@ -268,7 +267,7 @@ visreg(m_season_varying, xvar = "Month", gg = TRUE)
 
 
 m_season_varying_1 <- sdmTMB(
-  ScanWeightKg ~ s(Year) + 
+  ScanWeightKg ~ s(TAAFseason) + 
     s(Month, bs = "cc")  +
     s(NB_MEAN_CACHALOT)  ,
   offset = log(dat_pos$nb_ham * 0.246),
@@ -276,10 +275,12 @@ m_season_varying_1 <- sdmTMB(
   mesh = bspde_pos,
   family = Gamma(link = "log"),
   spatial = "on",
-  time = "Year",
+  time = "TAAFseason",
   spatiotemporal = "iid"
 )
 
+
+visreg(m_season_varying_1, xvar = "TAAFseason", gg = TRUE)
 visreg(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
 visreg(m_season_varying_1, xvar = "Month", gg = TRUE)
 visreg2d(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
@@ -293,6 +294,69 @@ AIC(m_season_varying_1)
  # -> le modèle ne converge pas
 
 
+beta <- m_season_varying_1$parlist$b_smooth[,1]
+beta_taaf <- beta[1:8]
+
+Z_taaf <- m_season_varying_1$smoothers$Zs[[1]]
+attr(Z_taaf, "s.label")
+# "s(TAAFseason)"
+
+
+f_taaf <- Z_taaf %*% beta_taaf
+eff_taaf <- data.frame(
+  TAAFseason = dat_pos$TAAFseason,
+  fit = as.numeric(f_taaf)
+)
+eff_taaf <- eff_taaf %>%
+  group_by(TAAFseason) %>%
+  summarise(fit = mean(fit), .groups = "drop")
+library(ggplot2)
+
+ggplot(eff_taaf, aes(TAAFseason, fit)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet partiel s(TAAFseason)"
+  )
+
+
+V <- m_season_varying_1$sd_report$cov.fixed
+Z <- m_season_varying_1$smoothers$Zs[[1]]
+Z <- Z[, 1:8]  # important !
+beta <- m_season_varying_1$parlist$b_smooth[,1]
+beta_taaf <- beta[1:8]
+
+fit <- as.numeric(Z %*% beta_taaf)
+var_fit <- diag(Z %*% V[1:8, 1:8] %*% t(Z))
+se_fit <- sqrt(var_fit)
+upper <- fit + 1.96 * se_fit
+lower <- fit - 1.96 * se_fit
+eff <- data.frame(
+  TAAFseason = dat_pos$TAAFseason,
+  fit = fit,
+  lower = lower,
+  upper = upper
+) %>%
+  group_by(TAAFseason) %>%
+  summarise(
+    fit = mean(fit),
+    lower = mean(lower),
+    upper = mean(upper),
+    .groups = "drop"
+  )
+
+ggplot(eff, aes(TAAFseason, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
+  )
 
 
 
@@ -649,8 +713,8 @@ grid <- Extrapol_grid %>%
 #7. Prédictions -----------------------------------
 
 # Vérifications rapides
-stopifnot("Year" %in% names(dat_pos))
-stopifnot(is.numeric(dat_pos$Year))
+stopifnot("TAAFseason" %in% names(dat_pos))
+stopifnot(is.numeric(dat_pos$TAAFseason))
 
 #Préparer grid avec un identifiant de cellule
 grid_with_id <- grid %>%
@@ -659,77 +723,106 @@ grid_with_id <- grid %>%
 grid_with_id <- dplyr::as_tibble(grid_with_id)
 
 #Réplication temporelle : une ligne par cellule × année
-years <- sort(unique(dat_pos$Year))
-month <- sort(unique(dat_pos$Month))
+years <- sort(unique(dat_pos$TAAFseason))
 grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)*length(month)) %>%
-  mutate(Year = rep(years, times = nrow(grid_with_id)*length(month)),
-         Month = rep(month, times = nrow(grid_with_id)*length(years))) %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(TAAFseason = rep(years, times = nrow(grid_with_id))) %>%
   mutate(cachalot_obs = 1,
+         Month = 10,
          nb_ham = 1,
          NB_MEAN_CACHALOT = 0) %>%
   relocate(cell_id)
 
 #Vérifier colonnes requises
-required_cols <- c("prof_bathy", "Year", "X", "Y")
+required_cols <- c("prof_bathy", "TAAFseason", "X", "Y")
 missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
 
-grid_all_years$offset <- log(grid_all_years$nb_ham * 0.246)
-# Prédiction (utilise chunking si nécessaire)
-pred_grid_raw <- predict_in_chunks(m_season_varying_1,  newdata = grid_all_years,
-                                   chunk_size = 30000)
 
-index_periode <- index %>%
-  mutate(
-    periode = case_when(
-      Year %in% c(2010, 2011) ~ "2010-2011",
-      Year %in% c(2011, 2012) ~ "2011-2012",
-      Year %in% c(2012, 2013) ~ "2012-2013",
-      Year %in% c(2013, 2014) ~ "2013-2014",
-      Year %in% c(2014, 2015) ~ "2014-2015",
-      Year %in% c(2015, 2016) ~ "2015-2016",
-      Year %in% c(2016, 2017) ~ "2016-2017",
-      Year %in% c(2017, 2018) ~ "2017-2018",
-      Year %in% c(2018, 2019) ~ "2018-2019",
-      Year %in% c(2019, 2020) ~ "2019-2020",
-      Year %in% c(2020, 2021) ~ "2020-2021",
-      Year %in% c(2021, 2022) ~ "2021-2022",
-      Year %in% c(2022, 2023) ~ "2022-2023",
-      Year %in% c(2023, 2024) ~ "2023-2024",
-      Year %in% c(2024, 2025) ~ "2024-2025",
-      TRUE ~ NA_character_
-    )
-  ) %>%
-  filter(!is.na(periode)) %>%
-  group_by(periode) %>%
+# Prédiction (utilise chunking si nécessaire)
+
+pred_std <- predict(
+  m_season_varying_1,
+  newdata = grid_all_years,
+  offset = log(grid_all_years$nb_ham * 0.246),
+  return_tmb_object = TRUE
+)
+
+index <- get_index(pred_std, bias_correct = FALSE)
+# index <- get_index_split(
+#   m_season_varying_1,
+#   newdata = grid_all_years,
+#   bias_correct = TRUE,
+#   nsplit = 5
+# )
+
+index %>%
+  filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
+  ggplot(aes(x = TAAFseason, y = est)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  geom_errorbar(
+    aes(ymin = lwr, ymax = upr),
+    width = 0.2
+  ) +
+  scale_x_continuous(breaks = 2010:2025) +
+  labs(
+    x = "Saison",
+    y = "Indice standardisé",
+    title = "Évolution de l'indice (2010–2025)"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+ggplot(
+  filter(index, TAAFseason >= 2010, TAAFseason <= 2025),
+  aes(TAAFseason, est)
+) +
+  geom_ribbon(
+    aes(ymin = lwr, ymax = upr),
+    alpha = 0.2
+  ) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  theme_bw() +
+  labs(
+    x = "Saison de pêche",
+    y = "Indice standardisé de la CPUE"
+  )
+
+
+
+
+
+
+
+
+cpue_summary <- dat_pos %>%
+  filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
+  group_by(TAAFseason) %>%
   summarise(
-    mean_index = mean(est),
-    IC_inf = mean(lwr),
-    IC_sup = mean(upr),
+    n = sum(!is.na(CPUE)),
+    mean_CPUE = mean(CPUE, na.rm = TRUE),
+    sd_CPUE = sd(CPUE, na.rm = TRUE),
+    se_CPUE = sd_CPUE / sqrt(n),
+    lwr = mean_CPUE - 1.96 * se_CPUE,
+    upr = mean_CPUE + 1.96 * se_CPUE,
     .groups = "drop"
   )
 
-
-ref <- index_periode$mean_index[
-  index_periode$periode == "2021-2022"
-]
-
-index_periode <- index_periode %>%
-  mutate(
-    index_rel = 100 * mean_index / ref,
-    pct_change = 100 * (mean_index / ref - 1)
-  )
-
-ggplot(index_periode,
-       aes(x = periode, y = mean_index)) +
-  geom_point(size = 3) +
-  geom_errorbar(
-    aes(ymin = IC_inf, ymax = IC_sup),
-    width = 0.15
+ggplot(cpue_summary, aes(TAAFseason, mean_CPUE)) +
+  geom_ribbon(
+    aes(ymin = lwr, ymax = upr),
+    alpha = 0.2
   ) +
-  theme_classic() +
-  labs(x = "", y = "Indice moyen")
-
-
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  theme_bw() +
+  labs(
+    x = "Saison de pêche",
+    y = "CPUE moyenne en g/hameçon"
+  )

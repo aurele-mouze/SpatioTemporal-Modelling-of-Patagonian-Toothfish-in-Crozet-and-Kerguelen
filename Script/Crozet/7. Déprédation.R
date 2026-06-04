@@ -137,6 +137,31 @@ dat_pos <- dat_pos %>%
     !is.na(NB_MEAN_ORQUE)
   )
 
+cpue_summary <- dat_pos %>%
+  filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
+  group_by(TAAFseason) %>%
+  summarise(
+    n = sum(!is.na(CPUE)),
+    mean_CPUE = mean(CPUE, na.rm = TRUE),
+    sd_CPUE = sd(CPUE, na.rm = TRUE),
+    se_CPUE = sd_CPUE / sqrt(n),
+    lwr = mean_CPUE - 1.96 * se_CPUE,
+    upr = mean_CPUE + 1.96 * se_CPUE,
+    .groups = "drop"
+  )
+
+ggplot(cpue_summary, aes(TAAFseason, mean_CPUE)) +
+  geom_ribbon(
+    aes(ymin = lwr, ymax = upr),
+    alpha = 0.2
+  ) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  theme_bw() +
+  labs(
+    x = "Saison de pêche",
+    y = "CPUE moyenne en g/hameçon"
+  )
 
 
 # 4. Mesh -----------------------------------------------------------------
@@ -1237,8 +1262,8 @@ grid_with_id <- dplyr::as_tibble(grid_with_id)
 #Réplication temporelle : une ligne par cellule × année
 years <- sort(unique(dat_pos$TAAFseason))
 grid_all_years <- grid_with_id %>%
-  tidyr::uncount(length(years)*length(month)) %>%
-  mutate(TAAFseason = rep(years, times = nrow(grid_with_id)*length(month))) %>%
+  tidyr::uncount(length(years)) %>%
+  mutate(TAAFseason = rep(years, times = nrow(grid_with_id))) %>%
   mutate(cachalot_obs = 1,
          Month = 2,
          orque_obs = 1,
@@ -1296,6 +1321,75 @@ ggplot(
   geom_point(size = 2) +
   theme_bw() +
   labs(
-    x = "Saison",
-    y = "Indice standardisé"
+    x = "Saison de pêche",
+    y = "Indice standardisé de la CPUE"
+  )
+
+
+
+beta <- m_season_varying_2$parlist$b_smooth[,1]
+
+beta_taaf <- beta[1:8]
+
+Z_taaf <- m_season_varying_2$smoothers$Zs[[1]]
+attr(Z_taaf, "s.label")
+# "s(TAAFseason)"
+
+f_taaf <- Z_taaf %*% beta_taaf
+eff_taaf <- data.frame(
+  TAAFseason = dat_pos$TAAFseason,
+  fit = as.numeric(f_taaf)
+)
+eff_taaf <- eff_taaf %>%
+  group_by(TAAFseason) %>%
+  summarise(fit = mean(fit), .groups = "drop")
+library(ggplot2)
+
+ggplot(eff_taaf, aes(TAAFseason, fit)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet partiel s(TAAFseason)"
+  )
+
+
+
+
+
+V <- m_season_varying_2$sd_report$cov.fixed
+Z <- m_season_varying_2$smoothers$Zs[[1]]
+Z <- Z[, 1:8]  # important !
+beta <- m_season_varying_2$parlist$b_smooth[,1]
+beta_taaf <- beta[1:8]
+
+fit <- as.numeric(Z %*% beta_taaf)
+var_fit <- diag(Z %*% V[1:8, 1:8] %*% t(Z))
+se_fit <- sqrt(var_fit)
+upper <- fit + 1.96 * se_fit
+lower <- fit - 1.96 * se_fit
+eff <- data.frame(
+  TAAFseason = dat_pos$TAAFseason,
+  fit = fit,
+  lower = lower,
+  upper = upper
+) %>%
+  group_by(TAAFseason) %>%
+  summarise(
+    fit = mean(fit),
+    lower = mean(lower),
+    upper = mean(upper),
+    .groups = "drop"
+  )
+
+ggplot(eff, aes(TAAFseason, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
   )
