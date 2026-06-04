@@ -163,6 +163,30 @@ ggplot(cpue_summary, aes(TAAFseason, mean_CPUE)) +
     y = "CPUE moyenne en g/hameçon"
   )
 
+cpue_summary <- cpue_summary %>%
+  arrange(TAAFseason)
+
+last_year <- max(cpue_summary$TAAFseason)
+
+cpue_2025 <- cpue_summary %>%
+  filter(TAAFseason == last_year) %>%
+  pull(mean_CPUE)
+
+cpue_2024 <- cpue_summary %>%
+  filter(TAAFseason == last_year - 1) %>%
+  pull(mean_CPUE)
+
+pct_24_25 <- 100 * (cpue_2025 - cpue_2024) / cpue_2024
+pct_24_25
+
+mean_4y <- cpue_summary %>%
+  filter(TAAFseason >= (last_year - 4),
+         TAAFseason < last_year) %>%
+  summarise(m = mean(mean_CPUE, na.rm = TRUE)) %>%
+  pull(m)
+
+pct_4y <- 100 * (cpue_2025 - mean_4y) / mean_4y
+pct_4y
 
 # 4. Mesh -----------------------------------------------------------------
 
@@ -305,6 +329,19 @@ m_season_varying_2 <- sdmTMB(
   time = "TAAFseason",
   spatiotemporal = "iid"
 )
+
+
+m_null <- sdmTMB(
+  ScanWeightKg ~ 1,
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "TAAFseason",
+  spatiotemporal = "iid"
+)
+
 
 
 #Comparaison des AIC :
@@ -1325,6 +1362,46 @@ ggplot(
     y = "Indice standardisé de la CPUE"
   )
 
+index_comp <- index %>%
+  filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
+  arrange(TAAFseason)
+
+last_year <- max(index_comp$TAAFseason)
+
+est_last <- index_comp %>%
+  filter(TAAFseason == last_year) %>%
+  pull(est)
+
+est_prev <- index_comp %>%
+  filter(TAAFseason == last_year - 1) %>%
+  pull(est)
+
+pct_vs_prev_year <- 100 * (est_last - est_prev) / est_prev
+
+pct_vs_prev_year
+
+
+index_comp <- index %>%
+  filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
+  arrange(TAAFseason)
+
+last_year <- max(index_comp$TAAFseason)
+
+est_last <- index_comp %>%
+  filter(TAAFseason == last_year) %>%
+  pull(est)
+
+mean_4y <- index_comp %>%
+  filter(TAAFseason >= (last_year - 4), TAAFseason < last_year) %>%
+  summarise(m = mean(est)) %>%
+  pull(m)
+
+pct_vs_4y <- 100 * (est_last - mean_4y) / mean_4y
+
+pct_vs_4y
+
+
+
 
 
 beta <- m_season_varying_2$parlist$b_smooth[,1]
@@ -1354,6 +1431,30 @@ ggplot(eff_taaf, aes(TAAFseason, fit)) +
     y = "Effet partiel s(TAAFseason)"
   )
 
+eff_taaf <- eff_taaf %>%
+  arrange(TAAFseason)
+
+last_year <- max(eff_taaf$TAAFseason)
+
+fit_2025 <- eff_taaf %>%
+  filter(TAAFseason == last_year) %>%
+  pull(fit)
+
+fit_2024 <- eff_taaf %>%
+  filter(TAAFseason == last_year - 1) %>%
+  pull(fit)
+
+pct_24_25 <- 100 * (fit_2025 - fit_2024) / abs(fit_2024)
+pct_24_25
+
+mean_4y <- eff_taaf %>%
+  filter(TAAFseason >= (last_year - 4),
+         TAAFseason < last_year) %>%
+  summarise(m = mean(fit, na.rm = TRUE)) %>%
+  pull(m)
+
+pct_4y <- 100 * (fit_2025 - mean_4y) / abs(mean_4y)
+pct_4y
 
 
 
