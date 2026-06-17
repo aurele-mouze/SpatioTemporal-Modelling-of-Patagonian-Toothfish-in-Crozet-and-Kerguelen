@@ -109,13 +109,21 @@ dat_pos <- dat_pos %>%
 
 dat_pos <- dat_pos %>%
   mutate(
-    # indicateur d'observation
-    cachalot_obs = as.integer(pres_cachalot != "non obsé"),
-    orque_obs = as.integer(pres_orque != "non obsé"),
     
-    # remplacer NA uniquement quand non observé
-    NB_MEAN_CACHALOT = ifelse(pres_cachalot == "non obsé", 0, NB_MEAN_CACHALOT),
-    NB_MEAN_ORQUE = ifelse(pres_orque == "non obsé", 0, NB_MEAN_ORQUE)
+    # indicateur d'observation
+    cachalot_obs = case_when(
+      pres_cachalot %in% c("présence", "absence") ~ 1,
+      pres_cachalot %in% c("non obsé", NA) ~ 0
+    ),
+    
+    orque_obs = case_when(
+      pres_orque %in% c("présence", "absence") ~ 1,
+      pres_orque %in% c("non obsé", NA) ~ 0
+    ),
+    
+    # mise à zéro des valeurs si pas observé
+    NB_MEAN_CACHALOT = ifelse(cachalot_obs == 0, 0, NB_MEAN_CACHALOT),
+    NB_MEAN_ORQUE    = ifelse(orque_obs == 0, 0, NB_MEAN_ORQUE)
   )
 
 
@@ -125,23 +133,37 @@ dat_pos <- dat_pos %>%
   )
 
 
+
+
 dat_pos <- dat_pos %>%
-  filter(
-    !is.na(pres_cachalot),
-    !is.na(pres_orque)
+  filter(,
+    !is.na(ScanWeightKg)
+  )
+
+
+dat_pos <- dat_pos %>%
+  filter(,
+         !is.na(NB_MEAN_ORQUE)
   )
 
 dat_pos <- dat_pos %>%
-  filter(
-    !is.na(pres_cachalot),
-    !is.na(pres_orque),
-    !is.na(ScanWeightKg)
+  filter(,
+         !is.na(tps_trempe_hm_num)
   )
+
+dat_pos <- dat_pos %>% filter(tps_trempe_hm_num < 100)
 
 dat_pos <- dat_pos %>%
   mutate(
     NB_MEAN_CACHALOT = ifelse(is.na(NB_MEAN_CACHALOT), 0, NB_MEAN_CACHALOT)
   )
+
+dat_pos$Vessel <- droplevels(dat_pos$Vessel)
+
+# dat_pos$bottomT[is.nan(dat_pos$bottomT)] <- NA
+# 
+# dat_pos <- dat_pos %>%
+#   filter(!is.na(bottomT))
 
 # 4. Mesh -----------------------------------------------------------------
 
@@ -215,6 +237,55 @@ if (SavePlots) {
 cat("→ mesh.png sauvegardé\n\n")
 
 
+
+
+
+ggplot(dat_pos, aes(x = Vessel, y = ScanWeightKg)) +
+  geom_boxplot() +
+  theme_minimal()
+
+ggplot(dat_pos, aes(x = Captain, y = ScanWeightKg)) +
+  geom_boxplot() +
+  theme_minimal()
+
+ggplot(dat_pos, aes(x = HookSize, y = ScanWeightKg)) +
+  geom_boxplot() +
+  theme_minimal()
+
+dat_count <- dat_pos %>%
+  group_by(Year, HookSize) %>%
+  summarise(n_stations = n(), .groups = "drop")
+
+ggplot(dat_count,
+       aes(x = Year, y = n_stations, color = factor(HookSize))) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    x = "Année",
+    y = "Nombre de stations",
+    color = "HookSize"
+  )
+
+
+ggplot(dat_pos, aes(x = prof_bathy, y = ScanWeightKg)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "loess") +
+  theme_minimal()
+
+ggplot(dat_pos, aes(x = slope, y = ScanWeightKg)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "loess") +
+  theme_minimal()
+
+ggplot(dat_pos, aes(x = tps_trempe_hm_num, y = ScanWeightKg)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "loess") +
+  theme_minimal()
+
+
+
+
 m_1 <- sdmTMB(
   ScanWeightKg ~ s(Year) + s(Month, bs = "cc"),
   offset = log(dat_pos$nb_ham * 0.246),
@@ -269,7 +340,7 @@ visreg(m_season_varying, xvar = "Month", gg = TRUE)
 m_season_varying_1 <- sdmTMB(
   ScanWeightKg ~ s(TAAFseason) + 
     s(Month, bs = "cc")  +
-    s(NB_MEAN_CACHALOT)  ,
+    s(NB_MEAN_CACHALOT) ,
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
@@ -280,11 +351,104 @@ m_season_varying_1 <- sdmTMB(
 )
 
 
-visreg(m_season_varying_1, xvar = "TAAFseason", gg = TRUE)
-visreg(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
-visreg(m_season_varying_1, xvar = "Month", gg = TRUE)
-visreg2d(m_season_varying_1, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
+m_season_varying_2 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + 
+    s(Month, bs = "cc")  +
+    s(NB_MEAN_CACHALOT)  +
+    + Vessel,
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "TAAFseason",
+  spatiotemporal = "iid"
+)
 
+
+
+m_season_varying_3 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + 
+    s(Month, bs = "cc")  +
+    s(NB_MEAN_CACHALOT)  +
+    + Vessel + s(tps_trempe_hm_num),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+
+m_season_varying_4 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + 
+    s(Month, bs = "cc")  +
+    s(NB_MEAN_CACHALOT)  +
+    + Vessel + s(prof_bathy) + s(tps_trempe_hm_num),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+AIC(m_season_varying_1)
+AIC(m_season_varying_2) 
+AIC(m_season_varying_3)
+AIC(m_season_varying_4)
+
+
+visreg(m_season_varying_4, xvar = "prof_bathy", gg = TRUE)
+visreg(m_season_varying_4, xvar = "Vessel", gg = TRUE)
+visreg(m_season_varying_4, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
+visreg(m_season_varying_4, xvar = "Month", gg = TRUE)
+visreg(m_season_varying_4, xvar = "tps_trempe_hm_num", gg = TRUE)
+
+
+
+V <- m_season_varying_4$sd_report$cov.fixed
+Z <- m_season_varying_4$smoothers$Zs[[1]]
+Z <- Z[, 1:8]  # important !
+
+beta <- m_season_varying_4$parlist$b_smooth[,1]
+beta_taaf <- beta[1:8]
+
+fit <- as.numeric(Z %*% beta_taaf)
+V_beta <- V[1:8, 1:8]
+
+ZV <- Z %*% V_beta
+
+var_fit <- rowSums(ZV * Z)
+se_fit <- sqrt(var_fit)
+upper <- fit + 1.96 * se_fit
+lower <- fit - 1.96 * se_fit
+eff <- data.frame(
+  TAAFseason = dat_pos$TAAFseason,
+  fit = fit,
+  lower = lower,
+  upper = upper
+) %>%
+  group_by(TAAFseason) %>%
+  summarise(
+    fit = mean(fit),
+    lower = mean(lower),
+    upper = mean(upper),
+    .groups = "drop"
+  )
+
+ggplot(eff, aes(TAAFseason, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1) +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
+  )
 
 #Comparaison des AIC :
 AIC(m_1)
@@ -407,14 +571,14 @@ offset_sans_cachalot <- log(0.246 * dat_sans_cachalot$nb_ham)
 # ------------------------
 
 pred_reel <- predict(
-  m_season_varying_2,
+  m_season_varying_4,
   newdata = dat_reel,
   offset = offset_reel,  # si on veut une CPUE en sortie
   type = "response"
 )
 
 pred_sans_dep <- predict(
-  m_season_varying_2,
+  m_season_varying_4,
   newdata = dat_sans_dep,
   offset = offset_sans_dep,
   type = "response"

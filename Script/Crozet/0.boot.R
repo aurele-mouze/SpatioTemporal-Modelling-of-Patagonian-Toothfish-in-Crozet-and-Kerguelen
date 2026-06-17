@@ -15,7 +15,9 @@ libr <- c(
 "tidyterra",
 "cowplot",
 "lubridate",
-"readr"
+"readr",
+"ncdf4",
+"visreg"
 )
 
 lapply(libr, require, character.only = TRUE)
@@ -39,3 +41,8 @@ source("Function/filtre_flag_dynamique.R")
 source("Function/barrier_mesh.R")
 source("Function/predict_in_chunks.R")
 source("Function/pseudo_R2.R")
+source("Function/get_mean_bottomT.R")
+source("Function/get_nc_data.R")
+
+
+nc_cache <- new.env(parent = emptyenv())

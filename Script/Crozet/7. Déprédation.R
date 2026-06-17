@@ -110,13 +110,21 @@ dat_pos <- dat_pos %>%
 
 dat_pos <- dat_pos %>%
   mutate(
-    # indicateur d'observation
-    cachalot_obs = as.integer(pres_cachalot != "non obsé"),
-    orque_obs = as.integer(pres_orque != "non obsé"),
     
-    # remplacer NA uniquement quand non observé
-    NB_MEAN_CACHALOT = ifelse(pres_cachalot == "non obsé", 0, NB_MEAN_CACHALOT),
-    NB_MEAN_ORQUE = ifelse(pres_orque == "non obsé", 0, NB_MEAN_ORQUE)
+    # indicateur d'observation
+    cachalot_obs = case_when(
+      pres_cachalot %in% c("présence", "absence") ~ 1,
+      pres_cachalot %in% c("non obsé", NA) ~ 0
+    ),
+    
+    orque_obs = case_when(
+      pres_orque %in% c("présence", "absence") ~ 1,
+      pres_orque %in% c("non obsé", NA) ~ 0
+    ),
+    
+    # mise à zéro des valeurs si pas observé
+    NB_MEAN_CACHALOT = ifelse(cachalot_obs == 0, 0, NB_MEAN_CACHALOT),
+    NB_MEAN_ORQUE    = ifelse(orque_obs == 0, 0, NB_MEAN_ORQUE)
   )
 
 
@@ -125,17 +133,31 @@ dat_pos <- dat_pos %>%
     !TAAFseason %in%  2026
   )
 
-dat_pos <- dat_pos %>%
-  filter(
-    !is.na(pres_cachalot),
-    !is.na(pres_orque)
-  )
+
 
 dat_pos <- dat_pos %>%
   filter(
     !is.na(NB_MEAN_CACHALOT),
     !is.na(NB_MEAN_ORQUE)
   )
+
+dat_pos$Vessel <- droplevels(dat_pos$Vessel)
+
+
+dat_pos$HookLength <- as.numeric(sub("_.*", "", dat_pos$HookSize))
+
+
+dat_pos <- dat_pos %>%
+  filter(HookLength != 7)
+
+
+mean_value <- mean(dat_pos$HookLength, na.rm = TRUE)
+
+
+dat_pos$HookLength[is.na(dat_pos$HookLength)] <- mean_value
+
+
+
 
 cpue_summary <- dat_pos %>%
   filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
@@ -261,16 +283,35 @@ cat("→ mesh.png sauvegardé\n\n")
 
 
 m_1 <- sdmTMB(
-  ScanWeightKg ~ s(Year) + s(Month, bs = "cc"),
+  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy) + s(slope) + s(HookLength) +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
   spatial = "on",
-  time= "Year",
+  time= "TAAFseason",
   spatiotemporal = "iid"
 )
 
+
+
+m_2 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy) + s(slope) + s(HookLength),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+visreg(m_1, xvar = "HookLength", gg = TRUE)
+visreg(m_1, xvar = "prof_bathy", gg = TRUE)
+visreg(m_1, xvar = "slope", gg = TRUE)
+visreg(m_1, xvar = "Vessel", gg = TRUE)
+visreg2d(m_1, xvar = "prof_bathy", yvar = "slope", plot.type = "image")
 
 
 
@@ -318,9 +359,9 @@ m_season_varying_1 <- sdmTMB(
 
 #enlever mois puis peut etre ensuite trouver biblio pour justifier (periode ou ils ont plus faim etc)
 m_season_varying_2 <- sdmTMB(
-  ScanWeightKg ~ s(TAAFseason) + 
+  ScanWeightKg ~ s(TAAFseason) +
     s(Month, bs = "cc")  +
-    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE) ,
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
@@ -331,8 +372,10 @@ m_season_varying_2 <- sdmTMB(
 )
 
 
-m_null <- sdmTMB(
-  ScanWeightKg ~ 1,
+m_season_varying_3 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) +
+    s(Month, bs = "cc")  +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE)  + Vessel,
   offset = log(dat_pos$nb_ham * 0.246),
   data = dat_pos,
   mesh = bspde_pos,
@@ -340,6 +383,44 @@ m_null <- sdmTMB(
   spatial = "on",
   time = "TAAFseason",
   spatiotemporal = "iid"
+)
+
+
+m_season_varying_4 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) +
+    s(Month, bs = "cc")  +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE) + Vessel + s(tps_trempe_hm_num),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+
+m_season_varying_5 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) +
+    s(Month, bs = "cc")  +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE) + Vessel + s(prof_bathy) + s(tps_trempe_hm_num),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time = "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+
+
+m_null <- sdmTMB(
+  ScanWeightKg ~ 1,
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos,
+  mesh = bspde_pos,
+  family = Gamma(link = "log")
 )
 
 
@@ -349,21 +430,59 @@ AIC(m_2)
 AIC(m_season_varying)
 AIC(m_season_varying_inter)
 AIC(m_season_varying_1)
-AIC(m_season_varying_2) # -> le modèle ne converge pas
-
-
+AIC(m_season_varying_2) 
+AIC(m_season_varying_3)
+AIC(m_season_varying_4)
+AIC(m_season_varying_5)
 
 library(visreg)
 
 #Visualitation des effets
-visreg(m_season_varying_2, xvar = "cachalot_obs", gg = TRUE)
-visreg(m_season_varying_2, xvar = "orque_obs", gg = TRUE)
-visreg(m_season_varying_2, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
-visreg(m_season_varying_2, xvar = "NB_MEAN_ORQUE", gg = TRUE)
-visreg(m_season_varying_2, xvar = "Month", gg = TRUE)
-visreg2d(m_season_varying_2, xvar = "NB_MEAN_CACHALOT", yvar = "Month", plot.type = "image")
-visreg2d(m_season_varying_2, xvar = "NB_MEAN_ORQUE", yvar = "Month", plot.type = "image")
-visreg2d(m_season_varying_2, xvar = "NB_MEAN_CACHALOT", yvar = "NB_MEAN_ORQUE", plot.type = "image")
+visreg(m_season_varying_5, xvar = "cachalot_obs", gg = TRUE)
+visreg(m_season_varying_5, xvar = "orque_obs", gg = TRUE)
+visreg(m_season_varying_5, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
+visreg(m_season_varying_5, xvar = "NB_MEAN_ORQUE", gg = TRUE)
+visreg(m_season_varying_5, xvar = "Month", gg = TRUE)
+visreg(m_season_varying_5, xvar = "Vessel", gg = TRUE)
+visreg(m_season_varying_5, xvar = "prof_bathy", gg = TRUE)
+visreg(m_season_varying_5, xvar = "tps_trempe_hm_num", gg = TRUE)
+visreg2d(m_season_varying_5, xvar = "NB_MEAN_CACHALOT", yvar = "NB_MEAN_ORQUE", plot.type = "image")
+
+V <- m_season_varying_5$sd_report$cov.fixed
+Z <- m_season_varying_5$smoothers$Zs[[1]]
+Z <- Z[, 1:8]  # important !
+beta <- m_season_varying_5$parlist$b_smooth[,1]
+beta_taaf <- beta[1:8]
+
+fit <- as.numeric(Z %*% beta_taaf)
+var_fit <- diag(Z %*% V[1:8, 1:8] %*% t(Z))
+se_fit <- sqrt(var_fit)
+upper <- fit + 1.96 * se_fit
+lower <- fit - 1.96 * se_fit
+eff <- data.frame(
+  TAAFseason = dat_pos$TAAFseason,
+  fit = fit,
+  lower = lower,
+  upper = upper
+) %>%
+  group_by(TAAFseason) %>%
+  summarise(
+    fit = mean(fit),
+    lower = mean(lower),
+    upper = mean(upper),
+    .groups = "drop"
+  )
+
+ggplot(eff, aes(TAAFseason, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1) +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
+  )
+
 
 
 visreg(m_season_varying, xvar = "NB_MEAN_CACHALOT", gg = TRUE)
@@ -375,7 +494,7 @@ visreg(m_season_varying, xvar = "NB_MEAN_ORQUE", gg = TRUE)
 
 # Contrôle des modèles
 
-dat_pos$resids <- residuals(m_season_varying_1)
+dat_pos$resids <- residuals(m_1)
 hist_residual <- ggplot(dat_pos, aes(x = resids)) +
   geom_histogram(
     bins = 30,
@@ -386,8 +505,8 @@ hist_residual <- ggplot(dat_pos, aes(x = resids)) +
   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
   theme_bw()
 
-s <- simulate(m_season_varying_1, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_season_varying_1, test_uniformity = TRUE)
+s <- simulate(m_1, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_1, test_uniformity = TRUE)
 
 QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
   geom_point(alpha = 0.4) +
@@ -799,7 +918,7 @@ index_nodep <- get_index(
 # =========================
 
 index_dep_year <- index_dep %>%
-  group_by(Year) %>%
+  group_by(TAAFseason) %>%
   summarise(
     est = weighted.mean(est, w = nb_ham, na.rm = TRUE),
     lwr = weighted.mean(lwr, w = nb_ham, na.rm = TRUE),
@@ -808,7 +927,7 @@ index_dep_year <- index_dep %>%
   mutate(scenario = "Avec déprédation")
 
 index_nodep_year <- index_nodep %>%
-  group_by(Year) %>%
+  group_by(TAAFseason) %>%
   summarise(
     est = weighted.mean(est, w = nb_ham, na.rm = TRUE),
     lwr = weighted.mean(lwr, w = nb_ham, na.rm = TRUE),
@@ -831,7 +950,7 @@ index_comp <- bind_rows(
 
 Abundance_Index <- ggplot(
   index_comp,
-  aes(Year, est, color = scenario, fill = scenario)
+  aes(TAAFseason, est, color = scenario, fill = scenario)
 ) +
   geom_ribbon(
     aes(ymin = lwr, ymax = upr),
@@ -840,7 +959,7 @@ Abundance_Index <- ggplot(
   ) +
   geom_line(linewidth = 1.2) +
   labs(
-    x = "Year",
+    x = "TAAFseason",
     y = "Biomasse prédite",
     color = "Scénario",
     fill = "Scénario"
@@ -853,14 +972,14 @@ Abundance_Index
 index_loss_year <- index_dep_year %>%
   left_join(
     index_nodep_year,
-    by = "Year",
+    by = "TAAFseason",
     suffix = c("_dep", "_nodep")
   ) %>%
   mutate(
     perte_pct = est_nodep - est_dep
   )
 
-ggplot(index_loss_year, aes(x = Year, y = perte_pct)) +
+ggplot(index_loss_year, aes(x = TAAFseason, y = perte_pct)) +
   geom_line(linewidth = 1.2) +
   geom_point() +
   theme_bw() +
@@ -925,28 +1044,28 @@ offset_sans_cachalot <- log(0.246 * dat_sans_cachalot$nb_ham)
 # ------------------------
 
 pred_reel <- predict(
-  m_season_varying_2,
+  m_1,
   newdata = dat_reel,
   offset = offset_reel,  # si on veut une CPUE en sortie
   type = "response"
   )
 
 pred_sans_dep <- predict(
-  m_season_varying_2,
+  m_1,
   newdata = dat_sans_dep,
   offset = offset_sans_dep,
   type = "response"
 )
 
 pred_sans_orque <- predict(
-  m_season_varying_2,
+  m_1,
   newdata = dat_sans_orque,
   offset = offset_sans_orque,
   type = "response"
 )
 
 pred_sans_cachalot <- predict(
-  m_season_varying_2,
+  m_1,
   newdata = dat_sans_cachalot,
   offset = offset_sans_cachalot,
   type = "response"
@@ -975,7 +1094,7 @@ df_station_predictions <- dat_pos %>%
   ) %>%
   select(
     StationID,
-    Year,
+    TAAFseason,
     Month,
     ScanWeightKg,
     nb_ham,
@@ -1008,21 +1127,21 @@ df_boxplot_pct <- df_station_predictions %>%
       100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
     
     perte_orque_pct =
-      100 * perte_orque / pred_sans_dep,
+      100 * (pred_sans_dep - pred_sans_cachalot) / pred_sans_dep,
     
     perte_cachalot_pct =
-      100 * perte_cachalot / pred_sans_dep
+      100 * (pred_sans_dep - pred_sans_orque) / pred_sans_dep
   ) %>%
   
   select(
-    Year,
+    TAAFseason,
     perte_totale_pct,
     perte_orque_pct,
     perte_cachalot_pct
   ) %>%
   
   pivot_longer(
-    cols = -Year,
+    cols = -TAAFseason,
     names_to = "type_perte",
     values_to = "pourcentage_perte"
   ) %>%
@@ -1038,7 +1157,7 @@ df_boxplot_pct <- df_station_predictions %>%
 
 # Boxplots
 ggplot(df_boxplot_pct,
-       aes(x = factor(Year),
+       aes(x = factor(TAAFseason),
            y = pourcentage_perte,
            fill = type_perte)) +
   
@@ -1068,7 +1187,7 @@ ggplot(df_boxplot_pct,
 
 
 df_summary <- df_boxplot_pct %>%
-  group_by(Year, type_perte) %>%
+  group_by(TAAFseason, type_perte) %>%
   summarise(
     mean_perte = mean(pourcentage_perte, na.rm = TRUE),
     q25 = quantile(pourcentage_perte, 0.25, na.rm = TRUE),
@@ -1077,12 +1196,11 @@ df_summary <- df_boxplot_pct %>%
   )
 
 ggplot(df_summary,
-       aes(x = Year,
+       aes(x = TAAFseason,
            y = mean_perte,
            color = type_perte)) +
   
   geom_line(linewidth = 1.1) +
-  geom_point(size = 2) +
   
   geom_ribbon(
     aes(ymin = q25, ymax = q75, fill = type_perte),
@@ -1097,6 +1215,36 @@ ggplot(df_summary,
     color = "Scénario",
     fill = "Scénario"
   )
+
+
+
+
+offset_pos <- log(0.246 * dat_pos$nb_ham)
+pred_reel <- predict(
+  m_1,
+  newdata = dat_pos,
+  offset = offset_pos,  # si on veut une CPUE en sortie
+  type = "response",
+  return_tmb_object = TRUE
+)
+
+pred_sans_dep <- predict(
+  m_2,
+  newdata = dat_pos,
+  offset = offset_pos,
+  type = "response",
+  return_tmb_object = TRUE
+)
+
+idx_reel <- get_index(pred_reel)
+
+idx_sans_dep <- get_index(pred_sans_dep)
+
+
+idx_plot <- bind_rows(
+  idx_reel %>% mutate(scenario = "Réel"),
+  idx_sans_dep %>% mutate(scenario = "Sans déprédation")
+)
 
 
 
@@ -1298,6 +1446,7 @@ grid_with_id <- dplyr::as_tibble(grid_with_id)
 
 #Réplication temporelle : une ligne par cellule × année
 years <- sort(unique(dat_pos$TAAFseason))
+years <- years[years >= 2010 & years <= 2025]
 grid_all_years <- grid_with_id %>%
   tidyr::uncount(length(years)) %>%
   mutate(TAAFseason = rep(years, times = nrow(grid_with_id))) %>%
@@ -1306,7 +1455,9 @@ grid_all_years <- grid_with_id %>%
          orque_obs = 1,
          nb_ham = 1,
          NB_MEAN_CACHALOT = 0,
-         NB_MEAN_ORQUE = 0) %>%
+         NB_MEAN_ORQUE = 0,
+         Vessel = "Albius",
+         HookLength = mean(dat_pos$HookLength)) %>%
   relocate(cell_id)
 
 #Vérifier colonnes requises
@@ -1315,15 +1466,25 @@ missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
 
-pred_std <- predict(
-  m_season_varying_2,
+
+index <- get_index_split(
+  m_1,
   newdata = grid_all_years,
-  offset = log(grid_all_years$nb_ham * 0.246),
-  return_tmb_object = TRUE
+  area = grid_all_years$nb_ham * 0.246,
+  bias_correct = FALSE,
+  nsplit = 8
 )
 
 
-index <- get_index(pred_std, bias_correct = TRUE)
+index_2 <- get_index_split(
+  m_2,
+  newdata = grid_all_years,
+  area = grid_all_years$nb_ham * 0.246,
+  bias_correct = FALSE,
+  nsplit = 8
+)
+
+
 
 index %>%
   filter(TAAFseason >= 2010, TAAFseason <= 2025) %>%
@@ -1459,38 +1620,150 @@ pct_4y
 
 
 
-V <- m_season_varying_2$sd_report$cov.fixed
-Z <- m_season_varying_2$smoothers$Zs[[1]]
-Z <- Z[, 1:8]  # important !
-beta <- m_season_varying_2$parlist$b_smooth[,1]
-beta_taaf <- beta[1:8]
 
-fit <- as.numeric(Z %*% beta_taaf)
-var_fit <- diag(Z %*% V[1:8, 1:8] %*% t(Z))
-se_fit <- sqrt(var_fit)
-upper <- fit + 1.96 * se_fit
-lower <- fit - 1.96 * se_fit
-eff <- data.frame(
-  TAAFseason = dat_pos$TAAFseason,
-  fit = fit,
-  lower = lower,
-  upper = upper
-) %>%
-  group_by(TAAFseason) %>%
-  summarise(
-    fit = mean(fit),
-    lower = mean(lower),
-    upper = mean(upper),
-    .groups = "drop"
+
+
+
+
+
+
+smooth_sdmTMB <- function(model, term, se = FALSE) {
+  
+  # labels des smooths
+  labs <- unlist(model$smoothers$labels)
+  
+  # index du smooth demandé
+  i <- which(labs == paste0("s(", term, ")"))
+  if (length(i) == 0) {
+    stop("Term not found. Available: ",
+         paste(gsub("s\\(|\\)", "", labs), collapse = ", "))
+  }
+  
+  # matrice Z du smooth
+  Z <- model$smoothers$Zs[[i]]
+  
+  # indices des coefficients dans b_smooth
+  starts <- model$smoothers$b_smooth_start + 1
+  dims   <- model$smoothers$sm_dims
+  idx <- starts[i]:(starts[i] + dims[i] - 1)
+  
+  # coefficients
+  beta <- model$parlist$b_smooth[,1]
+  b <- beta[idx]
+  
+  # fit
+  fit <- as.numeric(Z %*% b)
+  
+  out <- data.frame(
+    fit = fit
   )
+  
+  # SE (approx uniquement si demandé)
+  if (se) {
+    
+    V <- model$sd_report$cov.fixed
+    
+    # ⚠️ approximation (car V ≠ espace b_smooth)
+    Vb <- diag(length(b)) * mean(diag(V))
+    
+    se_fit <- sqrt(diag(Z %*% Vb %*% t(Z)))
+    
+    out$se <- se_fit
+    out$lower <- fit - 1.96 * se_fit
+    out$upper <- fit + 1.96 * se_fit
+  }
+  
+  return(out)
+}
 
-ggplot(eff, aes(TAAFseason, fit)) +
+eff <- smooth_sdmTMB(m_season_varying_2, "prof_bathy", se = TRUE)
+eff$prof_bathy <- dat_pos$prof_bathy
+
+ggplot(eff, aes(prof_bathy, fit)) +
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
-  geom_line(linewidth = 1) +
-  geom_point() +
+  geom_line(linewidth = 1)  +
   theme_bw() +
   labs(
     x = "TAAFseason",
     y = "Effet s(TAAFseason)",
     title = "Smooth temporel avec IC 95%"
   )
+
+
+
+
+
+
+eff <- smooth_sdmTMB(m_season_varying_2, "tps_trempe_hm_num", se = TRUE)
+eff$tps_trempe_hm_num <- dat_pos$tps_trempe_hm_num
+
+ggplot(eff, aes(tps_trempe_hm_num, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1)  +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
+  )
+
+
+
+
+eff <- smooth_sdmTMB(m_season_varying_2, "Month", se = TRUE)
+eff$Month <- dat_pos$Month
+
+ggplot(eff, aes(Month, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1)  +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
+  )
+
+
+
+eff <- smooth_sdmTMB(m_season_varying_2, "TAAFseason", se = TRUE)
+eff$TAAFseason <- dat_pos$TAAFseason
+
+ggplot(eff, aes(TAAFseason, fit)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  geom_line(linewidth = 1)  +
+  theme_bw() +
+  labs(
+    x = "TAAFseason",
+    y = "Effet s(TAAFseason)",
+    title = "Smooth temporel avec IC 95%"
+  )
+
+
+
+
+eff_cach <- data.frame(
+  level = c("absence","non obsé","présence"),
+  beta = c(
+    0,
+    coef(m_season_varying_2)["cachalot_obsnon obsé"],
+    coef(m_season_varying_2)["cachalot_obsprésence"]
+  )
+)
+ggplot(eff_cach, aes(level, beta)) +
+  geom_col() +
+  theme_bw() +
+  labs(x = "cachalot_obs", y = "Effet")
+
+
+eff_orque <- data.frame(
+  level = c("absence","non obsé","présence"),
+  beta = c(
+    0,
+    coef(m_season_varying_2)["orque_obsnon obsé"],
+    coef(m_season_varying_2)["orque_obsprésence"]
+  )
+)
+ggplot(eff_orque, aes(level, beta)) +
+  geom_col() +
+  theme_bw() +
+  labs(x = "orque_obs", y = "Effet")

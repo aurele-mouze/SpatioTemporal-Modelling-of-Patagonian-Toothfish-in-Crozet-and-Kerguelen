@@ -292,6 +292,7 @@ points_mid <- points_mid %>%
 # Ajout des coordonnées et profondeur bathy
 data_modelo = left_join(data_modelo, points_mid, by = c("StationID"))
 
+
 # Ajout des données de captures (CPUE)
 data_CPUE <- data_all_cap %>%
   dplyr::select(
@@ -307,11 +308,29 @@ data_CPUE <- data_all_cap %>%
     nb_max_cachalot, 
     nb_min_orque, 
     nb_max_orque, 
-    TAAFseason
+    TAAFseason,
+    Vessel,
+    HookSize,
+    Captain,
+    Observer,
+    HaulStartDate, 
+    HookType
   )
+
+
 
 data_modelo = left_join(data_modelo, data_CPUE, by = c("StationID"))
 
+data_modelo$bottomT <- mapply(
+  get_mean_bottomT,
+  lon_sta = data_modelo$x_mid,
+  lat_sta = data_modelo$y_mid,
+  date_depot = data_modelo$HaulStartDate,
+  date_remontee = data_modelo$HaulEndDate,
+  MoreArgs = list(
+    dossier_nc = "Data/KERGUELEN_final/bottomT/nc_daily"
+  )
+)
 
 data_modelo <- data_modelo %>%
   mutate(
