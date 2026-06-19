@@ -1000,160 +1000,160 @@ m_2 <- sdmTMB(
 # 
 # 
 # 
-# 
-# #Calcul des pertes par station
-# # =========================
-# # Prédictions par station
-# # =========================
-# 
-# 
-# 
-# # 2. Jeux de données pour les scénarios
-# # -------------------------------------
-# 
-# # Situation réelle (avec déprédation observée)
-# dat_reel <- dat_pos
-# 
-# # Sans aucune déprédation
-# dat_sans_dep <- dat_pos %>%
-#   mutate(
-#     NB_MEAN_CACHALOT = 0,
-#     NB_MEAN_ORQUE = 0
-#   )
-# 
-# # Sans orques uniquement
-# dat_sans_orque <- dat_pos %>%
-#   mutate(
-#     NB_MEAN_ORQUE = 0
-#   )
-# 
-# # Sans cachalots uniquement
-# dat_sans_cachalot <- dat_pos %>%
-#   mutate(
-#     NB_MEAN_CACHALOT = 0
-#   )
-# 
-# # 3. Offsets
-# # ----------
-# offset_reel <- log(0.246 * dat_reel$nb_ham)
-# offset_sans_dep <- log(0.246 * dat_sans_dep$nb_ham)
-# offset_sans_orque <- log(0.246 * dat_sans_orque$nb_ham)
-# offset_sans_cachalot <- log(0.246 * dat_sans_cachalot$nb_ham)
-# 
-# # 4. Prédictions du modèle
-# # ------------------------
-# 
-# pred_reel <- predict(
-#   m_1,
-#   newdata = dat_reel,
-#   offset = offset_reel,  # si on veut une CPUE en sortie
-#   type = "response"
-#   )
-# 
-# pred_sans_dep <- predict(
-#   m_1,
-#   newdata = dat_sans_dep,
-#   offset = offset_sans_dep,
-#   type = "response"
-# )
-# 
-# pred_sans_orque <- predict(
-#   m_1,
-#   newdata = dat_sans_orque,
-#   offset = offset_sans_orque,
-#   type = "response"
-# )
-# 
-# pred_sans_cachalot <- predict(
-#   m_1,
-#   newdata = dat_sans_cachalot,
-#   offset = offset_sans_cachalot,
-#   type = "response"
-# )
-# 
-# # 5. Dataframe final
-# # ------------------
-# 
-# df_station_predictions <- dat_pos %>%
-#   mutate(
-#     poids_reel = ScanWeightKg,
-#     
-#     pred_modele = pred_reel$est,
-#     
-#     pred_sans_dep = pred_sans_dep$est,
-#     
-#     pred_sans_orque = pred_sans_orque$est,
-#     
-#     pred_sans_cachalot = pred_sans_cachalot$est,
-#     
-#     perte_totale = pred_sans_dep - pred_modele,
-#     
-#     perte_orque = pred_sans_orque - pred_modele,
-#     
-#     perte_cachalot = pred_sans_cachalot - pred_modele
-#   ) %>%
-#   select(
-#     StationID,
-#     TAAFseason,
-#     Month,
-#     ScanWeightKg,
-#     nb_ham,
-#     NB_MEAN_CACHALOT,
-#     NB_MEAN_ORQUE,
-#     X,
-#     Y,
-#     cachalot_obs,
-#     orque_obs,
-#     poids_reel,
-#     pred_modele,
-#     pred_sans_dep,
-#     pred_sans_orque,
-#     pred_sans_cachalot,
-#     perte_totale,
-#     perte_orque,
-#     perte_cachalot
-#   )
-# 
+
+#Calcul des pertes par station
+# =========================
+# Prédictions par station
+# =========================
+
+
+
+# 2. Jeux de données pour les scénarios
+# -------------------------------------
+
+# Situation réelle (avec déprédation observée)
+dat_reel <- dat_pos
+
+# Sans aucune déprédation
+dat_sans_dep <- dat_pos %>%
+  mutate(
+    NB_MEAN_CACHALOT = 0,
+    NB_MEAN_ORQUE = 0
+  )
+
+# Sans orques uniquement
+dat_sans_orque <- dat_pos %>%
+  mutate(
+    NB_MEAN_ORQUE = 0
+  )
+
+# Sans cachalots uniquement
+dat_sans_cachalot <- dat_pos %>%
+  mutate(
+    NB_MEAN_CACHALOT = 0
+  )
+
+# 3. Offsets
+# ----------
+offset_reel <- log(0.246 * dat_reel$nb_ham)
+offset_sans_dep <- log(0.246 * dat_sans_dep$nb_ham)
+offset_sans_orque <- log(0.246 * dat_sans_orque$nb_ham)
+offset_sans_cachalot <- log(0.246 * dat_sans_cachalot$nb_ham)
+
+# 4. Prédictions du modèle
+# ------------------------
+
+pred_reel <- predict(
+  m_1,
+  newdata = dat_reel,
+  offset = offset_reel,  # si on veut une CPUE en sortie
+  type = "response"
+  )
+
+pred_sans_dep <- predict(
+  m_1,
+  newdata = dat_sans_dep,
+  offset = offset_sans_dep,
+  type = "response"
+)
+
+pred_sans_orque <- predict(
+  m_1,
+  newdata = dat_sans_orque,
+  offset = offset_sans_orque,
+  type = "response"
+)
+
+pred_sans_cachalot <- predict(
+  m_1,
+  newdata = dat_sans_cachalot,
+  offset = offset_sans_cachalot,
+  type = "response"
+)
+
+# 5. Dataframe final
+# ------------------
+
+df_station_predictions <- dat_pos %>%
+  mutate(
+    poids_reel = ScanWeightKg,
+
+    pred_modele = pred_reel$est,
+
+    pred_sans_dep = pred_sans_dep$est,
+
+    pred_sans_orque = pred_sans_orque$est,
+
+    pred_sans_cachalot = pred_sans_cachalot$est,
+
+    perte_totale = pred_sans_dep - pred_modele,
+
+    perte_orque = pred_sans_orque - pred_modele,
+
+    perte_cachalot = pred_sans_cachalot - pred_modele
+  ) %>%
+  select(
+    StationID,
+    TAAFseason,
+    Month,
+    ScanWeightKg,
+    nb_ham,
+    NB_MEAN_CACHALOT,
+    NB_MEAN_ORQUE,
+    X,
+    Y,
+    cachalot_obs,
+    orque_obs,
+    poids_reel,
+    pred_modele,
+    pred_sans_dep,
+    pred_sans_orque,
+    pred_sans_cachalot,
+    perte_totale,
+    perte_orque,
+    perte_cachalot
+  )
+
 # # Résultat
 # head(df_station_predictions)
 # 
 # saveRDS(df_station_predictions,
 #         "prediction_depredation_crozet.rds")
 # 
-# # Création des pourcentages
-# df_boxplot_pct <- df_station_predictions %>%
-#   mutate(
-#     perte_totale_pct =
-#       100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
-#     
-#     perte_orque_pct =
-#       100 * (pred_sans_dep - pred_sans_cachalot) / pred_sans_dep,
-#     
-#     perte_cachalot_pct =
-#       100 * (pred_sans_dep - pred_sans_orque) / pred_sans_dep
-#   ) %>%
-#   
-#   select(
-#     TAAFseason,
-#     perte_totale_pct,
-#     perte_orque_pct,
-#     perte_cachalot_pct
-#   ) %>%
-#   
-#   pivot_longer(
-#     cols = -TAAFseason,
-#     names_to = "type_perte",
-#     values_to = "pourcentage_perte"
-#   ) %>%
-#   
-#   mutate(
-#     type_perte = recode(
-#       type_perte,
-#       perte_totale_pct = "Déprédation totale",
-#       perte_orque_pct = "Perte orques",
-#       perte_cachalot_pct = "Perte cachalots"
-#     )
-#   )
+# Création des pourcentages
+df_boxplot_pct <- df_station_predictions %>%
+  mutate(
+    perte_totale_pct =
+      100 * (pred_sans_dep - pred_modele) / pred_sans_dep,
+
+    perte_orque_pct =
+      100 * (pred_sans_dep - pred_sans_cachalot) / pred_sans_dep,
+
+    perte_cachalot_pct =
+      100 * (pred_sans_dep - pred_sans_orque) / pred_sans_dep
+  ) %>%
+
+  select(
+    TAAFseason,
+    perte_totale_pct,
+    perte_orque_pct,
+    perte_cachalot_pct
+  ) %>%
+
+  pivot_longer(
+    cols = -TAAFseason,
+    names_to = "type_perte",
+    values_to = "pourcentage_perte"
+  ) %>%
+
+  mutate(
+    type_perte = recode(
+      type_perte,
+      perte_totale_pct = "Déprédation totale",
+      perte_orque_pct = "Perte orques",
+      perte_cachalot_pct = "Perte cachalots"
+    )
+  )
 # 
 # # Boxplots
 # ggplot(df_boxplot_pct,
@@ -1186,35 +1186,39 @@ m_2 <- sdmTMB(
 # 
 # 
 # 
-# df_summary <- df_boxplot_pct %>%
-#   group_by(TAAFseason, type_perte) %>%
-#   summarise(
-#     mean_perte = mean(pourcentage_perte, na.rm = TRUE),
-#     q25 = quantile(pourcentage_perte, 0.25, na.rm = TRUE),
-#     q75 = quantile(pourcentage_perte, 0.75, na.rm = TRUE),
-#     .groups = "drop"
-#   )
-# 
-# ggplot(df_summary,
-#        aes(x = TAAFseason,
-#            y = mean_perte,
-#            color = type_perte)) +
-#   
-#   geom_line(linewidth = 1.1) +
-#   
-#   geom_ribbon(
-#     aes(ymin = q25, ymax = q75, fill = type_perte),
-#     alpha = 0.15,
-#     color = NA
-#   ) +
-#   
-#   theme_minimal() +
-#   labs(
-#     x = "Année",
-#     y = "Perte moyenne (%)",
-#     color = "Scénario",
-#     fill = "Scénario"
-#   )
+df_summary <- df_boxplot_pct %>%
+  filter(TAAFseason >= 2010) %>%
+  group_by(TAAFseason, type_perte) %>%
+  summarise(
+    mean_perte = mean(pourcentage_perte, na.rm = TRUE),
+    sd = sd(pourcentage_perte, na.rm = TRUE),
+    n = sum(!is.na(pourcentage_perte)),
+    se = sd / sqrt(n),
+    ic_inf = mean_perte - 1.96 * se,
+    ic_sup = mean_perte + 1.96 * se,
+    .groups = "drop"
+  )
+
+ggplot(df_summary,
+       aes(x = TAAFseason,
+           y = mean_perte,
+           color = type_perte)) +
+  
+  geom_line(linewidth = 1.1) +
+  
+  geom_ribbon(
+    aes(ymin = ic_inf, ymax = ic_sup, fill = type_perte),
+    alpha = 0.15,
+    color = NA
+  ) +
+  
+  theme_minimal() +
+  labs(
+    x = "Year",
+    y = "Average loss (%)",
+    color = "script",
+    fill = "script"
+  )
 # 
 # 
 # 
@@ -1478,22 +1482,107 @@ index_std <- get_index(pred_std, bias_correct = FALSE)
 
 
 
-index <- get_index_split(
-  m_1,
-  newdata = grid_all_years,
-  area = grid_all_years$nb_ham * 0.246,
-  bias_correct = FALSE,
-  nsplit = 8
-)
-
-
-index_2 <- get_index_split(
+pred <- predict(
   m_2,
   newdata = grid_all_years,
-  area = grid_all_years$nb_ham * 0.246,
-  bias_correct = FALSE,
-  nsplit = 8
+  offset = log(grid_all_years$nb_ham * 0.246),
+  return_tmb_object = TRUE
 )
+
+index <- get_index(pred, bias_correct = FALSE)
+
+# Ajouter le nom du modèle
+index_std$model <- "CPUE depredation model"
+index$model <- "CPUE model without depredation"
+
+# Fusionner
+indices_comp <- bind_rows(index_std, index)
+
+ggplot(indices_comp,
+       aes(x = TAAFseason, y = est, colour = model, group = model)) +
+  geom_line(linewidth = 1.2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr, fill = model),
+              alpha = 0.2, colour = NA) +
+  theme_bw() +
+  labs(
+    x = "Year",
+    y = "mean Standardized CPUE (g/hook)",
+    colour = "Model",
+    fill = "Model"
+  )
+
+
+
+
+grid_comp <- pred_std$data %>%
+  mutate(
+    est_depred = est,
+    est_classique = pred$data$est,
+    diff = est_depred - est_classique,
+    ratio = est_depred / est_classique,
+    diff_pct = 100 * (est_depred - est_classique) / est_classique,
+    log_ratio = log(est_depred) - log(est_classique)
+  )
+
+
+
+
+map_mean <- grid_comp %>%
+  group_by(cell_id, X, Y) %>%
+  summarise(
+    mean_diff_pct = mean(diff_pct, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+ggplot(map_mean,
+       aes(X, Y, fill = mean_diff_pct)) +
+  geom_tile() +
+  coord_equal() +
+  scale_fill_gradient2(
+    midpoint = 0,
+    low = "blue",
+    mid = "white",
+    high = "red",
+    name = "% différence"
+  ) +
+  theme_bw()
+
+
+map_mean <- map_mean %>%
+  mutate(
+    X = X * 1000,
+    Y = Y * 1000
+  )
+map_mean_sf <- st_as_sf(map_mean, coords = c("X","Y"), crs = 32743)
+
+map_mean_sf <- st_transform(map_mean_sf, 4326)
+
+
+
+CRO_map +
+  geom_sf(
+    data = map_mean_sf,
+    aes(fill = mean_diff_pct),
+    inherit.aes = FALSE
+  )
+
+
+CRO_map + 
+  geom_sf(
+    data = map_mean_sf, 
+    aes(color = mean_diff_pct), 
+    size = 1, 
+    alpha = 0.7,
+    inherit.aes = FALSE
+    ) + 
+  scale_color_gradient2( 
+    midpoint = 0, 
+    low = "red", 
+    mid = "white", 
+    high = "red",
+    name = "Difference of CPUE in %" )
+
 
 
 
