@@ -115,6 +115,10 @@ repeated_random_CV <- function(converged_models,
           obs <- cv_fit$data[[response_name]]
           pred <- cv_fit$data$cv_predicted
           
+          
+          if (is.null(obs) || is.null(pred)) next
+          
+          
           ok <- is.finite(obs) & is.finite(pred)
           
           cv_predictions[[mesh_name]][[response_name]][[family_name]][[rep_id]] <- tibble(

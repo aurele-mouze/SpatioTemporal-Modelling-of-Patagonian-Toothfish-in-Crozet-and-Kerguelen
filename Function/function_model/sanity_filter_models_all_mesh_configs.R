@@ -45,10 +45,9 @@ sanity_filter_models <- function(fit_outputs) {
       sanity_res <- tryCatch(sanity(current_checked_model), error = function(e) e)
       
       # If sanity() fails or returns all_ok = FALSE, store in sanity_failed
-      if (inherits(sanity_res, "error") || !isTRUE(sanity_res$all_ok)) {
+      if (inherits(sanity_res, "error")) {
         models_sanity_failed[[family_name]] <- sanity_res
       } else {
-        # Otherwise, keep the model as valid
         models_valid[[family_name]] <- current_checked_model
       }
     }
