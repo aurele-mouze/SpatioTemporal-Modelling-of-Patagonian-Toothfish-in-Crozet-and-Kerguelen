@@ -296,6 +296,28 @@ m_1 <- sdmTMB(
 
 
 
+c <- visreg(
+  m_2,
+  xvar = "NB_MEAN_CACHALOT",
+  gg = TRUE,
+  line.par = list(col = "navy", lwd = 1.5),
+  fill.par = list(col = NA, fill = "cadetblue2"),
+  partial = FALSE
+)
+
+
+
+
+o <- visreg(
+  m_2,
+  xvar = "NB_MEAN_ORQUE",
+  gg = TRUE,
+  line.par = list(col = "navy", lwd = 1.5),
+  fill.par = list(col = NA, fill = "cadetblue2"),
+  partial = FALSE
+)
+
+
 m_2 <- sdmTMB(
   ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy) + s(slope) + s(HookLength),
   offset = log(dat_pos$nb_ham * 0.246),
