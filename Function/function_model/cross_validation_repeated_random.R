@@ -73,7 +73,7 @@ repeated_random_CV <- function(converged_models,
             k_folds = k_folds
           )
           
-          if (response_name == "totalWeightKg") {
+          if (response_name == "ScanWeightKg") {
             sdmTMB_cv_args$offset <- "logSweptAreaKm2"
           }
           

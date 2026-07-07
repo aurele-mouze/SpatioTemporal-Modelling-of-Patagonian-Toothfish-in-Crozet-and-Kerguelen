@@ -212,10 +212,10 @@ source(here('Function', 'function_model', 'create_mesh_all_configs.R'))
 
 
 params <- list(data_m = dat_pos,
-               cutoff_values = c(50, 100 ),#5, 7, 10, 15, 20),
-               max_edge_in = c(15, 100),#20, 35, 50, 75, 100),
+               cutoff_values = c(40, 80, 160 ),
+               max_edge_in = c(15, 40, 80),
                max_edge_out = rep(100, 6),
-               utm_crs_used = st_crs(32742),
+               utm_crs_used = st_crs(32743),
                land_domain = Study_domain_Hole)
 
 

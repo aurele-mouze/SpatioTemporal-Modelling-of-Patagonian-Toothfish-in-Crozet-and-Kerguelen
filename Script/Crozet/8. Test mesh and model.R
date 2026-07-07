@@ -170,7 +170,15 @@ st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs
 
 
 
-
+dat_pos_std <- dat_pos %>%
+  mutate(
+    TAAFseason_sc = as.numeric(scale(TAAFseason)),
+    prof_bathy_sc = as.numeric(scale(prof_bathy)),
+    slope_sc = as.numeric(scale(slope)),
+    HookLength_sc = as.numeric(scale(HookLength)),
+    NB_MEAN_CACHALOT_sc = as.numeric(scale(NB_MEAN_CACHALOT)),
+    NB_MEAN_ORQUE_sc = as.numeric(scale(NB_MEAN_ORQUE))
+  )
 
 
 
@@ -197,8 +205,8 @@ source(here('Function', 'function_model', 'create_mesh_all_configs.R'))
 
 
 params <- list(data_m = dat_pos,
-               cutoff_values = c(40, 80, 160 ),
-               max_edge_in = c(15, 40, 80),
+               cutoff_values = c(10, 11, 15),
+               max_edge_in  = c( 5, 20, 20),
                max_edge_out = rep(100, 6),
                utm_crs_used = st_crs(32743),
                land_domain = Study_domain_Hole)
@@ -214,15 +222,39 @@ meshes <- do.call(create_meshes_configurations, params)
 responses <- c("ScanWeightKg")
 
 # Fixed-effects
-fixed_effect <- "s(TAAFseason) + s(Month, bs = 'cc') + Vessel + s(prof_bathy) + s(slope) + s(HookLength) +
-    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE)"
+fixed_effect <- "TAAFseason + Month + Vessel + prof_bathy_sc + slope_sc + HookLength_sc + cachalot_obs + orque_obs + NB_MEAN_CACHALOT_sc * NB_MEAN_ORQUE_sc"
+
+# candidate_terms <- c(
+#   "s(TAAFseason_sc)",
+#   "s(Month, bs = 'cc')",      # on ne standardise pas un mois cyclique
+#   "Vessel",
+#   "s(prof_bathy_sc)",
+#   "s(slope_sc)",
+#   "s(HookLength_sc)",
+#   "cachalot_obs",
+#   "orque_obs",
+#   "s(NB_MEAN_CACHALOT_sc, NB_MEAN_ORQUE_sc)"
+# )
+# 
+# selection <- forward_selection_fixed_effects(
+#   data = dat_pos_std,
+#   response = "ScanWeightKg",
+#   mesh = meshes$cutoff_50$mesh,
+#   family = sdmTMB::tweedie(link = "log"),
+#   candidate_terms = candidate_terms
+# )
+# 
+# selection$selected_terms
+# selection$final_formula
+# selection$history
+# selection$best_model
 
 source(here('Function', 'function_model', 'fit_candidate_models_all_mesh_configs.R'))
 
 
 
 fitted_models <- fit_candidate_models(
-  data_CGFS = dat_pos,
+  data_CGFS = dat_pos_std,
   meshes_configurations = meshes
 )
 
@@ -259,7 +291,7 @@ repeated_randomCV <- list()
 
 
 repeated_randomCV <- repeated_random_CV(
-  converged_models = converged_models, meshes = meshes, data_CGFS = dat_pos, n_repeats = 10, k_folds = 10, seed = 123)
+  converged_models = converged_models, meshes = meshes, data_CGFS = dat_pos_std, n_repeats = 10, k_folds = 10, seed = 123)
 
 
 
