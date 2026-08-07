@@ -30,6 +30,25 @@ CRO_map <- ggplot() +
   ) +
   
   geom_sf(
+    data = Isobath_CRO_sf %>% dplyr::filter(level == "-2500"),
+    colour = "grey80",
+    inherit.aes = FALSE,
+    linewidth = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_CRO_sf %>% dplyr::filter(level == "-3000"),
+    colour = "grey60",
+    inherit.aes = FALSE,
+    linewidth = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_CRO_sf %>% dplyr::filter(level == "-3500"),
+    colour = "grey30",
+    inherit.aes = FALSE,
+    linewidth = 0.5
+  ) +
+  
+  geom_sf(
     data = EEZ_sf,
     fill = "transparent",
     inherit.aes = FALSE,

@@ -138,7 +138,8 @@ dat_pos <- dat_pos %>%
 dat_pos <- dat_pos %>%
   filter(
     !is.na(NB_MEAN_CACHALOT),
-    !is.na(NB_MEAN_ORQUE)
+    !is.na(NB_MEAN_ORQUE),
+    !is.na(bottomT)
   )
 
 dat_pos$Vessel <- droplevels(dat_pos$Vessel)
@@ -157,6 +158,40 @@ mean_value <- mean(dat_pos$HookLength, na.rm = TRUE)
 dat_pos$HookLength[is.na(dat_pos$HookLength)] <- mean_value
 
 
+
+
+
+
+Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
+  mutate(geometry = st_geometry(.) / 1000)
+
+# Update CRS to indicate units in kilometers (custom CRS)
+
+st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
+
+
+
+dat_pos_std <- dat_pos %>%
+  mutate(
+    TAAFseason_sc = as.numeric(scale(TAAFseason)),
+    prof_bathy_sc = as.numeric(scale(prof_bathy)),
+    slope_sc = as.numeric(scale(slope)),
+    HookLength_sc = as.numeric(scale(HookLength)),
+    NB_MEAN_CACHALOT_sc = as.numeric(scale(NB_MEAN_CACHALOT)),
+    NB_MEAN_ORQUE_sc = as.numeric(scale(NB_MEAN_ORQUE)),
+    bottomT_sc = as.numeric(scale(bottomT))
+  )
+
+
+dat_pos_std <- dat_pos_std %>%
+  mutate(
+    cachalot_obs = factor(cachalot_obs,
+                          levels = c(0, 1),
+                          labels = c("Absent", "Présent")),
+    orque_obs = factor(orque_obs,
+                       levels = c(0, 1),
+                       labels = c("Absent", "Présent"))
+  )
 
 
 cpue_summary <- dat_pos %>%
@@ -220,7 +255,12 @@ Study_domain_Hole <- readRDS("Data/Ker_polygon.rds")%>%
 st_crs(Study_domain_Hole) <- "+proj=utm +zone=42 +datum=WGS84 +units=km +no_defs"
 
 
-mesh_pos <- make_mesh(dat_pos, xy_cols = c("X", "Y"), n_knots = 200)
+mesh_pos <- make_mesh(
+  dat_pos,
+  xy_cols = c("X", "Y"),
+  cutoff = 10,
+  max_edge = c(20, 100)
+)
 
 
 # Add Barrier to account for donut effect of the island
@@ -283,10 +323,10 @@ cat("→ mesh.png sauvegardé\n\n")
 
 
 m_1 <- sdmTMB(
-  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy) + s(slope) + s(HookLength) +
-    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT, NB_MEAN_ORQUE),
+  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy_sc) + s(slope_sc) + s(HookLength_sc) +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT_sc, NB_MEAN_ORQUE_sc) + s(bottomT_sc),
   offset = log(dat_pos$nb_ham * 0.246),
-  data = dat_pos,
+  data = dat_pos_std,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
   spatial = "on",
@@ -294,7 +334,56 @@ m_1 <- sdmTMB(
   spatiotemporal = "iid"
 )
 
+m_1 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy_sc) + s(slope_sc) + s(HookLength_sc) +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT_sc, NB_MEAN_ORQUE_sc),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos_std,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "TAAFseason",
+  spatiotemporal = "iid"
+)
 
+m_3 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy_sc) + s(HookLength_sc) +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT_sc, NB_MEAN_ORQUE_sc),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos_std,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+m_4 <- sdmTMB(
+  ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(HookLength_sc) +
+    cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT_sc, NB_MEAN_ORQUE_sc),
+  offset = log(dat_pos$nb_ham * 0.246),
+  data = dat_pos_std,
+  mesh = bspde_pos,
+  family = Gamma(link = "log"),
+  spatial = "on",
+  time= "TAAFseason",
+  spatiotemporal = "iid"
+)
+
+ + 
+
+
+a <- visreg(m_1, xvar = "Month")
+b <- visreg(m_1, xvar = "Vessel")
+c <- visreg(m_1, xvar = "prof_bathy_sc")
+d <- visreg(m_1, xvar = "slope_sc")
+e <- visreg(m_1, xvar = "HookLength_sc")
+g <- visreg(m_1, xvar = "cachalot_obs")
+h <- visreg(m_1, xvar = "orque_obs")
+i <- visreg(m_1, xvar = "NB_MEAN_CACHALOT_sc")
+j <- visreg(m_1, xvar = "NB_MEAN_ORQUE_sc")
+k <- visreg(m_1, xvar = "bottomT_sc")
+l <- visreg2d(m_1, xvar = "NB_MEAN_CACHALOT_sc", yvar = "NB_MEAN_ORQUE_sc", plot.type = "image")
 
 c <- visreg(
   m_2,
@@ -1032,27 +1121,34 @@ m_2 <- sdmTMB(
 
 # 2. Jeux de données pour les scénarios
 # -------------------------------------
+mean_cach <- mean(dat_pos$NB_MEAN_CACHALOT)
+sd_cach   <- sd(dat_pos$NB_MEAN_CACHALOT)
 
+mean_orq <- mean(dat_pos$NB_MEAN_ORQUE)
+sd_orq   <- sd(dat_pos$NB_MEAN_ORQUE)
 # Situation réelle (avec déprédation observée)
-dat_reel <- dat_pos
+dat_reel <- dat_pos_std
 
 # Sans aucune déprédation
-dat_sans_dep <- dat_pos %>%
+dat_sans_dep <- dat_pos_std %>%
   mutate(
     NB_MEAN_CACHALOT = 0,
-    NB_MEAN_ORQUE = 0
+    NB_MEAN_ORQUE = 0,
+    NB_MEAN_CACHALOT_sc = (0 - mean_cach) / sd_cach,
+    NB_MEAN_ORQUE_sc = (0 - mean_orq) / sd_orq
   )
 
 # Sans orques uniquement
-dat_sans_orque <- dat_pos %>%
+dat_sans_orque <- dat_pos_std %>%
   mutate(
-    NB_MEAN_ORQUE = 0
+    NB_MEAN_ORQUE = 0,
+    NB_MEAN_ORQUE_sc = (0 - mean_orq) / sd_orq
   )
 
-# Sans cachalots uniquement
-dat_sans_cachalot <- dat_pos %>%
+dat_sans_cachalot <- dat_pos_std %>%
   mutate(
-    NB_MEAN_CACHALOT = 0
+    NB_MEAN_CACHALOT = 0,
+    NB_MEAN_CACHALOT_sc = (0 - mean_cach) / sd_cach
   )
 
 # 3. Offsets
@@ -1096,7 +1192,7 @@ pred_sans_cachalot <- predict(
 # 5. Dataframe final
 # ------------------
 
-df_station_predictions <- dat_pos %>%
+df_station_predictions <- dat_pos_std %>%
   mutate(
     poids_reel = ScanWeightKg,
 
@@ -1120,8 +1216,8 @@ df_station_predictions <- dat_pos %>%
     Month,
     ScanWeightKg,
     nb_ham,
-    NB_MEAN_CACHALOT,
-    NB_MEAN_ORQUE,
+    NB_MEAN_CACHALOT_sc,
+    NB_MEAN_ORQUE_sc,
     X,
     Y,
     cachalot_obs,
@@ -1209,7 +1305,7 @@ df_boxplot_pct <- df_station_predictions %>%
 # 
 # 
 df_summary <- df_boxplot_pct %>%
-  filter(TAAFseason >= 2010) %>%
+  filter(TAAFseason >= 2008 & TAAFseason <= 2025) %>%
   group_by(TAAFseason, type_perte) %>%
   summarise(
     mean_perte = mean(pourcentage_perte, na.rm = TRUE),
@@ -1233,7 +1329,17 @@ ggplot(df_summary,
     alpha = 0.15,
     color = NA
   ) +
+  scale_color_manual(
+    values = c("Déprédation totale" = "navyblue",
+               "Perte orques" = "cyan4",
+               "Perte cachalots" = "cadetblue2")
+  ) +
   
+  scale_fill_manual(
+    values = c("Déprédation totale" = "navyblue",
+               "Perte orques" = "cyan4",
+               "Perte cachalots" = "cadetblue2")
+  ) +
   theme_minimal() +
   labs(
     x = "Year",
@@ -1241,6 +1347,789 @@ ggplot(df_summary,
     color = "script",
     fill = "script"
   )
+
+
+
+crs_crozet_km <- "+proj=utm +zone=43 +south +datum=WGS84 +units=km +no_defs"
+
+
+stations_sf <- st_as_sf(
+  df_station_predictions,
+  coords = c("X", "Y"),
+  crs = st_crs(crs_crozet_km)
+)
+
+bbox <- st_bbox(stations_sf)
+
+grid_4km <- st_make_grid(
+  st_as_sfc(st_bbox(stations_sf)),
+  cellsize = 4,
+  square = TRUE
+)
+
+grid_4km <- st_sf(
+  cell_id = seq_along(grid_4km),
+  geometry = grid_4km
+)
+
+
+
+stations_grid <- st_join(
+  stations_sf,
+  grid_4km,
+  join = st_within
+)
+
+grid_summary <- stations_grid %>%
+  st_drop_geometry() %>%
+  group_by(cell_id) %>%
+  summarise(
+    poids_reel = sum(pred_modele, na.rm = TRUE),
+    poids_sans_dep = sum(pred_sans_dep, na.rm = TRUE),
+    poids_sans_orque = sum(pred_sans_orque, na.rm = TRUE),
+    poids_sans_cachalot = sum(pred_sans_cachalot, na.rm = TRUE),
+    n_station = n()
+  ) %>%
+  mutate(
+    perte_totale_pct =
+      100 * (poids_sans_dep - poids_reel) / poids_sans_dep,
+    
+    perte_orque_pct =
+      100 * (poids_sans_dep - poids_sans_orque) / poids_sans_dep,
+    
+    perte_cachalot_pct =
+      100 * (poids_sans_dep - poids_sans_cachalot) / poids_sans_dep
+  )
+
+grid_plot <- left_join(
+  grid_4km,
+  grid_summary,
+  by = "cell_id"
+)
+
+grid_plot <- grid_plot %>%
+  filter(!is.na(perte_totale_pct))
+
+ggplot(grid_plot) +
+  geom_sf(aes(fill = perte_totale_pct), color = NA)  +
+  scale_fill_viridis_c() +
+  theme_bw()
+
+grid_plot_4326 <- st_transform(grid_plot, 4326)
+CRO_map_dep <- CRO_map +
+     geom_sf(
+        data = grid_plot_4326,
+        aes(fill = perte_totale_pct),
+        color = NA,
+        alpha = 0.7,
+        inherit.aes = FALSE
+     ) +
+   scale_fill_viridis_c(
+         name = "Perte (%)"
+     )+
+  annotation_scale(
+    location = "bl",
+    width_hint = 0.3
+  ) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    style = north_arrow_fancy_orienteering
+  ) +
+  theme_bw() +
+  theme(
+    legend.position = c(0.95, 0.10)
+  )
+
+ CRO_map_dep
+ 
+ 
+ 
+ stations_grid <- stations_grid %>%
+   filter(TAAFseason >= 2008 & TAAFseason <= 2025) %>%
+   mutate(
+     periode = case_when(
+       TAAFseason >= 2008 & TAAFseason <= 2013 ~ "2008-2013",
+       TAAFseason >= 2014 & TAAFseason <= 2019 ~ "2014-2019",
+       TAAFseason >= 2020 & TAAFseason <= 2025 ~ "2020-2025"
+     )
+   )
+ 
+ grid_summary_year <- stations_grid %>%
+   st_drop_geometry() %>%
+   group_by(periode, TAAFseason, cell_id) %>%
+   summarise(
+     poids_reel = sum(pred_modele, na.rm = TRUE),
+     poids_sans_dep = sum(pred_sans_dep, na.rm = TRUE),
+     .groups = "drop"
+   ) %>%
+   mutate(
+     perte_totale_pct =
+       100 * (poids_sans_dep - poids_reel) / poids_sans_dep
+   )
+ 
+ grid_summary_period <- grid_summary_year %>%
+   group_by(periode, cell_id) %>%
+   summarise(
+     perte_moy = mean(perte_totale_pct, na.rm = TRUE),
+     .groups = "drop"
+   )
+ 
+ grid_plot_period <- grid_4km %>%
+   right_join(
+     grid_summary_period,
+     by = "cell_id"
+   )
+ 
+ grid_plot_period_4326 <- st_transform(
+   grid_plot_period,
+   4326
+ )
+ 
+ Cro_map_dep_period <- CRO_map +
+   geom_sf(
+     data = grid_plot_period_4326,
+     aes(fill = perte_moy),
+     color = NA,
+     alpha = 0.7,
+     inherit.aes = FALSE
+   ) +
+   facet_wrap(~periode) +
+   scale_fill_viridis_c(
+     name = "Perte (%)"
+   ) +
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw()
+ 
+ 
+ 
+ 
+ 
+ 
+ stations_grid <- stations_grid %>%
+   filter(TAAFseason >= 2008 & TAAFseason <= 2025)
+ 
+ 
+ grid_summary_year <- stations_grid %>%
+   st_drop_geometry() %>%
+   group_by(cell_id, TAAFseason) %>%
+   summarise(
+     poids_reel = sum(pred_modele, na.rm = TRUE),
+     poids_sans_dep = sum(pred_sans_dep, na.rm = TRUE),
+     .groups = "drop"
+   ) %>%
+   mutate(
+     perte_totale_pct =
+       100 * (poids_sans_dep - poids_reel) / poids_sans_dep
+   )
+ grid_summary <- grid_summary_year %>%
+   group_by(cell_id) %>%
+   summarise(
+     perte_moy = mean(perte_totale_pct, na.rm = TRUE),
+     sd_perte = sd(perte_totale_pct, na.rm = TRUE),
+     n_annees = n(),
+     .groups = "drop"
+   )
+ Q90 <- quantile(
+   grid_summary$perte_moy,
+   probs = 0.90,
+   na.rm = TRUE
+ )
+ 
+ Q90
+ grid_plot <- left_join(
+   grid_4km,
+   grid_summary,
+   by = "cell_id"
+ )
+ 
+ hotspots <- grid_plot %>%
+   mutate(
+     hotspot = perte_moy >= Q90
+   )
+ ggplot(hotspots) +
+   geom_sf(aes(fill = hotspot), color = NA) +
+   scale_fill_manual(values = c("grey90", "red")) +
+   theme_bw()
+ 
+ hot <- hotspots %>%
+   filter(hotspot)
+ 
+ centres <- st_centroid(hot)
+ cellsize <- 4
+ 
+ voisins <- st_is_within_distance(
+   centres,
+   dist = 6
+ )
+ 
+ g <- graph_from_adj_list(voisins)
+ 
+ hot$hotspot_id <- components(g)$membership
+ 
+ ggplot(hot) +
+   geom_sf(aes(fill = factor(hotspot_id)), color = NA) +
+   theme_bw()
+ 
+ # Taille de chaque hotspot
+ taille_hotspots <- hot %>%
+   st_drop_geometry() %>%
+   count(hotspot_id, name = "n_cellules")
+ 
+ # On rattache la taille à chaque cellule
+ hot <- hot %>%
+   left_join(taille_hotspots, by = "hotspot_id")
+ 
+ # On ne conserve que les hotspots d'au moins 3 cellules
+ hot <- hot %>%
+   filter(n_cellules >= 10)
+ ggplot(hot) +
+   geom_sf(aes(fill = factor(hotspot_id)), color = NA) +
+   theme_bw()
+ hot_4326 <- st_transform(hot, 4326)
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hot_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.2,
+     alpha = 0.7,
+     inherit.aes = FALSE
+   ) +
+   scale_fill_viridis_d(
+     name = "Hotspot"
+   ) +
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw()
+ 
+ Cro_map_hotspots
+ 
+ 
+ 
+ hotspots_poly <- hot %>%
+   group_by(hotspot_id) %>%
+   summarise(
+     n_cellules = first(n_cellules),
+     .groups = "drop"
+   )
+ hotspots_smooth <- hotspots_poly %>%
+   st_buffer(dist = 1) %>% 
+   st_buffer(dist = -1)
+ hotspots_smooth_4326 <- st_transform(hotspots_smooth, 4326)
+ 
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hotspots_smooth_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.5,
+     alpha = 0.6,
+     inherit.aes = FALSE
+   ) +
+   scale_fill_manual(
+     name = "Hotspot",
+     values = c("navyblue")
+   )+
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw() 
+   
+ 
+ Cro_map_hotspots
+ 
+ 
+ 
+ 
+ stations_grid <- stations_grid %>%
+   filter(TAAFseason != 2026)
+ 
+ stations_grid <- stations_grid %>%
+   mutate(
+     periode = case_when(
+       TAAFseason >= 2008 & TAAFseason <= 2013 ~ "2008-2013",
+       TAAFseason >= 2014 & TAAFseason <= 2019 ~ "2014-2019",
+       TAAFseason >= 2020 & TAAFseason <= 2025 ~ "2020-2025"
+     )
+   )
+ 
+ grid_summary_period <- stations_grid %>%
+   st_drop_geometry() %>%
+   group_by(periode, cell_id, TAAFseason) %>%
+   summarise(
+     poids_reel = sum(pred_modele, na.rm = TRUE),
+     poids_sans_dep = sum(pred_sans_dep, na.rm = TRUE),
+     .groups = "drop"
+   ) %>%
+   mutate(
+     perte_totale_pct =
+       100 * (poids_sans_dep - poids_reel) / poids_sans_dep
+   )
+ grid_mean_period <- grid_summary_period %>%
+   group_by(periode, cell_id) %>%
+   summarise(
+     perte_moy = mean(perte_totale_pct, na.rm = TRUE),
+     .groups = "drop"
+   )
+ 
+ Q90_period <- grid_mean_period %>%
+   group_by(periode) %>%
+   summarise(
+     Q90 = quantile(perte_moy, 0.90, na.rm = TRUE)
+   )
+ 
+ hot_cells_period <- grid_mean_period %>%
+   left_join(Q90_period, by = "periode") %>%
+   mutate(
+     hotspot = perte_moy >= Q90
+   ) %>%
+   filter(hotspot)
+ 
+ hot_sf_period <- grid_4km %>%
+   right_join(
+     hot_cells_period,
+     by = "cell_id"
+   )
+ find_hotspots <- function(df){
+   
+   centres <- st_centroid(df)
+   
+   voisins <- st_is_within_distance(
+     centres,
+     dist = 6   # une cellule de 7 km
+   )
+   
+   edges <- do.call(
+     rbind,
+     lapply(seq_along(voisins), function(i){
+       if(length(voisins[[i]]) == 0) return(NULL)
+       cbind(i, voisins[[i]])
+     })
+   )
+   
+   if(is.null(edges)){
+     df$hotspot_id <- 1
+   } else {
+     
+     g <- graph_from_edgelist(
+       edges,
+       directed = FALSE
+     )
+     
+     df$hotspot_id <- components(g)$membership
+   }
+   
+   df
+ }
+ 
+ 
+ hotspots_period <- hot_sf_period %>%
+   split(.$periode) %>%
+   lapply(find_hotspots)
+ hotspots_period <- lapply(
+   hotspots_period,
+   function(x){
+     
+     x %>%
+       add_count(
+         periode,
+         hotspot_id,
+         name = "n_cellules"
+       ) %>%
+       filter(n_cellules >= 10)
+     
+   }
+ )
+ hotspots_all <- do.call(
+   rbind,
+   hotspots_period
+ )
+ hotspots_poly <- hotspots_all %>%
+   group_by(periode, hotspot_id) %>%
+   summarise(
+     n_cellules = first(n_cellules),
+     perte_moy = mean(perte_moy, na.rm = TRUE),
+     .groups = "drop"
+   ) %>%
+   st_buffer(1) %>%
+   st_buffer(-1)
+ hotspots_poly_4326 <- st_transform(
+   hotspots_poly,
+   4326
+ )
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hotspots_poly_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.4,
+     alpha = 0.6,
+     inherit.aes = FALSE
+   ) +
+   facet_wrap(~periode) +
+   scale_fill_viridis_d(
+     name = "Hotspot"
+   ) +
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw()
+ 
+ Cro_map_hotspots
+ 
+ 
+ 
+ 
+
+ #Orque
+ 
+ crs_crozet_km <- "+proj=utm +zone=43 +south +datum=WGS84 +units=km +no_defs"
+ 
+ 
+ stations_sf <- st_as_sf(
+   df_station_predictions,
+   coords = c("X", "Y"),
+   crs = st_crs(crs_crozet_km)
+ )
+ 
+ bbox <- st_bbox(stations_sf)
+ 
+ grid_4km <- st_make_grid(
+   st_as_sfc(st_bbox(stations_sf)),
+   cellsize = 4,
+   square = TRUE
+ )
+ 
+ grid_4km <- st_sf(
+   cell_id = seq_along(grid_4km),
+   geometry = grid_4km
+ )
+ 
+ 
+ 
+ stations_grid <- st_join(
+   stations_sf,
+   grid_4km,
+   join = st_within
+ )
+ stations_grid <- stations_grid %>%
+   filter(TAAFseason >= 2008 & TAAFseason <= 2025)
+ 
+ grid_summary_year <- stations_grid %>%
+   st_drop_geometry() %>%
+   group_by(cell_id, TAAFseason) %>%
+   summarise(
+     poids_reel = sum(pred_modele, na.rm = TRUE),
+     poids_sans_orque = sum(pred_sans_orque, na.rm = TRUE),
+     .groups = "drop"
+   ) %>%
+   mutate(
+     perte_orque_pct =
+       100 * (poids_sans_orque - poids_reel) / poids_sans_orque
+   )
+ 
+ grid_summary <- grid_summary_year %>%
+   group_by(cell_id) %>%
+   summarise(
+     perte_moy = mean(perte_orque_pct, na.rm = TRUE),
+     sd_perte = sd(perte_orque_pct, na.rm = TRUE),
+     n_annees = n(),
+     .groups = "drop"
+   )
+ 
+ Q90 <- quantile(
+   grid_summary$perte_moy,
+   probs = 0.90,
+   na.rm = TRUE
+ )
+ 
+ Q90
+ grid_plot <- left_join(
+   grid_4km,
+   grid_summary,
+   by = "cell_id"
+ )
+ 
+ hotspots <- grid_plot %>%
+   mutate(
+     hotspot = perte_moy >= Q90
+   )
+ ggplot(hotspots) +
+   geom_sf(aes(fill = hotspot), color = NA) +
+   scale_fill_manual(values = c("grey90", "red")) +
+   theme_bw()
+ 
+ hot <- hotspots %>%
+   filter(hotspot)
+ 
+ centres <- st_centroid(hot)
+ cellsize <- 4
+ 
+ voisins <- st_is_within_distance(
+   centres,
+   dist = 6
+ )
+ 
+ g <- graph_from_adj_list(voisins)
+ 
+ hot$hotspot_id <- components(g)$membership
+ 
+ ggplot(hot) +
+   geom_sf(aes(fill = factor(hotspot_id)), color = NA) +
+   theme_bw()
+ 
+ # Taille de chaque hotspot
+ taille_hotspots <- hot %>%
+   st_drop_geometry() %>%
+   count(hotspot_id, name = "n_cellules")
+ 
+ # On rattache la taille à chaque cellule
+ hot <- hot %>%
+   left_join(taille_hotspots, by = "hotspot_id")
+ 
+ # On ne conserve que les hotspots d'au moins 3 cellules
+ hot <- hot %>%
+   filter(n_cellules >= 10)
+ ggplot(hot) +
+   geom_sf(aes(fill = factor(hotspot_id)), color = NA) +
+   theme_bw()
+ hot_4326 <- st_transform(hot, 4326)
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hot_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.2,
+     alpha = 0.7,
+     inherit.aes = FALSE
+   ) +
+   scale_fill_viridis_d(
+     name = "Hotspot"
+   ) +
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw()
+ 
+ Cro_map_hotspots
+ 
+ hotspots_poly <- hot %>%
+   group_by(hotspot_id) %>%
+   summarise(
+     n_cellules = first(n_cellules),
+     .groups = "drop"
+   )
+ hotspots_smooth <- hotspots_poly %>%
+   st_buffer(dist = 1) %>% 
+   st_buffer(dist = -1)
+ hotspots_smooth_4326 <- st_transform(hotspots_smooth, 4326)
+ 
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hotspots_smooth_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.5,
+     alpha = 0.6,
+     inherit.aes = FALSE
+   ) +
+   scale_fill_manual(
+     name = "Hotspot",
+     values = c("cyan4", "cadetblue3")
+   )+
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw() 
+ 
+ 
+ Cro_map_hotspots
+ 
+ 
+ 
+ grid_summary_year <- stations_grid %>%
+   st_drop_geometry() %>%
+   group_by(cell_id, TAAFseason) %>%
+   summarise(
+     poids_reel = sum(pred_modele, na.rm = TRUE),
+     poids_sans_cachalot = sum(pred_sans_cachalot, na.rm = TRUE),
+     .groups = "drop"
+   ) %>%
+   mutate(
+     perte_cachalot_pct =
+       100 * (poids_sans_cachalot - poids_reel) / poids_sans_cachalot
+   )
+ 
+ grid_summary <- grid_summary_year %>%
+   group_by(cell_id) %>%
+   summarise(
+     perte_moy = mean(perte_cachalot_pct, na.rm = TRUE),
+     sd_perte = sd(perte_cachalot_pct, na.rm = TRUE),
+     n_annees = n(),
+     .groups = "drop"
+   )
+ 
+ Q90 <- quantile(
+   grid_summary$perte_moy,
+   probs = 0.90,
+   na.rm = TRUE
+ )
+ 
+ Q90
+ grid_plot <- left_join(
+   grid_4km,
+   grid_summary,
+   by = "cell_id"
+ )
+ 
+ hotspots <- grid_plot %>%
+   mutate(
+     hotspot = perte_moy >= Q90
+   )
+ ggplot(hotspots) +
+   geom_sf(aes(fill = hotspot), color = NA) +
+   scale_fill_manual(values = c("grey90", "red")) +
+   theme_bw()
+ 
+ hot <- hotspots %>%
+   filter(hotspot)
+ 
+ centres <- st_centroid(hot)
+ cellsize <- 4
+ 
+ voisins <- st_is_within_distance(
+   centres,
+   dist = 6
+ )
+ 
+ g <- graph_from_adj_list(voisins)
+ 
+ hot$hotspot_id <- components(g)$membership
+ 
+ ggplot(hot) +
+   geom_sf(aes(fill = factor(hotspot_id)), color = NA) +
+   theme_bw()
+ 
+ # Taille de chaque hotspot
+ taille_hotspots <- hot %>%
+   st_drop_geometry() %>%
+   count(hotspot_id, name = "n_cellules")
+ 
+ # On rattache la taille à chaque cellule
+ hot <- hot %>%
+   left_join(taille_hotspots, by = "hotspot_id")
+ 
+ # On ne conserve que les hotspots d'au moins 3 cellules
+ hot <- hot %>%
+   filter(n_cellules >= 10)
+ ggplot(hot) +
+   geom_sf(aes(fill = factor(hotspot_id)), color = NA) +
+   theme_bw()
+ hot_4326 <- st_transform(hot, 4326)
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hot_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.2,
+     alpha = 0.7,
+     inherit.aes = FALSE
+   ) +
+   scale_fill_viridis_d(
+     name = "Hotspot"
+   ) +
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw()
+ 
+ Cro_map_hotspots
+ 
+ hotspots_poly <- hot %>%
+   group_by(hotspot_id) %>%
+   summarise(
+     n_cellules = first(n_cellules),
+     .groups = "drop"
+   )
+ hotspots_smooth <- hotspots_poly %>%
+   st_buffer(dist = 1) %>% 
+   st_buffer(dist = -1)
+ hotspots_smooth_4326 <- st_transform(hotspots_smooth, 4326)
+ 
+ Cro_map_hotspots <- CRO_map +
+   geom_sf(
+     data = hotspots_smooth_4326,
+     aes(fill = factor(hotspot_id)),
+     color = "black",
+     linewidth = 0.5,
+     alpha = 0.6,
+     inherit.aes = FALSE
+   ) +
+   scale_fill_manual(
+     name = "Hotspot",
+     values = c("cyan4")
+   )+
+   annotation_scale(
+     location = "bl",
+     width_hint = 0.3
+   ) +
+   annotation_north_arrow(
+     location = "tr",
+     which_north = "true",
+     style = north_arrow_fancy_orienteering
+   ) +
+   theme_bw() 
+ 
+ 
+ Cro_map_hotspots
+ 
+ 
 # 
 # 
 # 

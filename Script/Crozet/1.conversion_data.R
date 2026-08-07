@@ -321,22 +321,16 @@ data_CPUE <- data_all_cap %>%
 
 data_modelo = left_join(data_modelo, data_CPUE, by = c("StationID"))
 
-data_modelo$bottomT <- mapply(
-  get_mean_bottomT,
-  lon_sta = data_modelo$x_mid,
-  lat_sta = data_modelo$y_mid,
-  date_depot = data_modelo$HaulStartDate,
-  date_remontee = data_modelo$HaulEndDate,
-  MoreArgs = list(
-    dossier_nc = "Data/KERGUELEN_final/bottomT/nc_daily"
-  )
-)
 
 data_modelo <- data_modelo %>%
-  mutate(
-    Year = year(HaulEndDate),
-    Month = month(HaulEndDate)
-  )
+  mutate(Year = year(HaulEndDate),
+         Month = month(HaulEndDate))
+
+i <- is.na(data_modelo$HaulStartDate)
+data_modelo$HaulStartDate[i] <- data_modelo$HaulEndDate[i]
+
+i <- is.na(data_modelo$HaulEndDate)
+data_modelo$HaulEndDate[i] <- data_modelo$HaulStartDate[i]
 
 
 # Renommage et transformation finale
@@ -346,6 +340,30 @@ data_modelo = data_modelo %>%
          prof_bathy = valeur_raster) %>%
   mutate()
 
+
+data_modelo$bottomT <- mapply(
+  get_mean_bottomT,
+  lon_sta = data_modelo$x,
+  lat_sta = data_modelo$y,
+  date_depot = data_modelo$HaulStartDate,
+  date_remontee = data_modelo$HaulEndDate,
+  MoreArgs = list(
+    dossier_nc = "Data/CROZET_final/bottomT/nc_daily"
+  )
+)
+
+
+data_modelo$salinity <- mapply(
+  get_mean_salinity,
+  lon_sta = data_modelo$x,
+  lat_sta = data_modelo$y,
+  depth_sta = data_modelo$prof_bathy,
+  date_depot = data_modelo$HaulStartDate,
+  date_remontee = data_modelo$HaulEndDate,
+  MoreArgs = list(
+    dossier_nc = "Data/CROZET_final/salinity_bottom/nc_daily"
+  )
+)
 # Ajout des pentes
 slope_by_station <- slope_by_station %>%
   mutate(StationID = as.character(StationID))

@@ -33,6 +33,24 @@ KER_map <- ggplot() + xlim(63.6,75.9) + ylim(-52.4,-45.3) + xlab("Longitude") + 
     size = 0.5
   ) +
   geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-2500")),
+    colour = "grey80",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-3000")),
+    colour = "grey60",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(
+    data = Isobath_KER_sf  %>% dplyr::filter(level %in% c("-3500")),
+    colour = "grey30",
+    inherit.aes = F,
+    size = 0.5
+  ) +
+  geom_sf(
     data = EEZ_sf,
     fill = "transparent",
     inherit.aes = F,

@@ -138,7 +138,8 @@ dat_pos <- dat_pos %>%
 dat_pos <- dat_pos %>%
   filter(
     !is.na(NB_MEAN_CACHALOT),
-    !is.na(NB_MEAN_ORQUE)
+    !is.na(NB_MEAN_ORQUE),
+    !is.na(bottomT)
   )
 
 dat_pos$Vessel <- droplevels(dat_pos$Vessel)
@@ -177,7 +178,8 @@ dat_pos_std <- dat_pos %>%
     slope_sc = as.numeric(scale(slope)),
     HookLength_sc = as.numeric(scale(HookLength)),
     NB_MEAN_CACHALOT_sc = as.numeric(scale(NB_MEAN_CACHALOT)),
-    NB_MEAN_ORQUE_sc = as.numeric(scale(NB_MEAN_ORQUE))
+    NB_MEAN_ORQUE_sc = as.numeric(scale(NB_MEAN_ORQUE)),
+    bottomT_sc = as.numeric(scale(bottomT))
   )
 
 

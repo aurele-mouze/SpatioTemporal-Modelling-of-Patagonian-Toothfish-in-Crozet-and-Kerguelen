@@ -128,6 +128,6 @@ source("Function/predict_in_chunks.R")
 source("Function/pseudo_R2.R")
 source("Function/get_mean_bottomT.R")
 source("Function/get_nc_data.R")
-
+source("Function/get_salinity.R")
 
 nc_cache <- new.env(parent = emptyenv())
