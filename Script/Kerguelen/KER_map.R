@@ -111,17 +111,4 @@ KER_SHELF_map <- ggplot() + xlim(63.6, 73) + ylim(-52, -46) + xlab("Longitude") 
 
 
 
-bathy <- rast("C:/Users/aurel/Documents/GitHub/stage_AM/Data/gebco_2025_n-27.1582_s-75.8145_w25.1719_e116.1563.nc")
-bathy
-plot(bathy)
-bathy_band <- ifel(bathy <= -500 & bathy >= -2500, 1, NA)
-bathy_poly <- as.polygons(bathy_band, dissolve = TRUE)
-bathy_poly <- st_as_sf(bathy_poly)
 
-KER_SHELF_map +
-  geom_sf(
-    data = bathy_poly,
-    fill = "lightblue",
-    colour = NA,
-    alpha = 0.5
-  )

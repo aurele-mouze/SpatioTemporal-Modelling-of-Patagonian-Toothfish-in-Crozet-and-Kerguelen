@@ -341,8 +341,8 @@ delta_x1 <- 2 * (ll_1 - ll_spat)
 delta_x2 <- 2 * (ll_2 - ll_spat)
 delta_x3 <- 2 * (ll_2 - ll_1)
 
-dat_pos$resids <- residuals(m_1)
-hist_residual <- ggplot(dat_pos, aes(x = resids)) +
+dat_pos_std$resids <- residuals(m_1)
+hist_residual <- ggplot(dat_pos_std, aes(x = resids)) +
   geom_histogram(
     bins = 30,
     fill = "steelblue",
@@ -352,8 +352,8 @@ hist_residual <- ggplot(dat_pos, aes(x = resids)) +
   labs(title = "Histogramme des résidus", x = "Résidus", y = "Fréquence") +
   theme_bw()
 
-s <- simulate(m_3, nsim = number_sim, type = "mle-mvn")
-dharma_qqplot = dharma_residuals(s, m_3, test_uniformity = TRUE)
+s <- simulate(m_1, nsim = number_sim, type = "mle-mvn")
+dharma_qqplot = dharma_residuals(s, m_1, test_uniformity = TRUE)
 
 QQplot <- ggplot(dharma_qqplot, aes(x = expected, y = observed)) +
   geom_point(alpha = 0.4) +
