@@ -1,3 +1,7 @@
+#Lit les températures du fond marin (bottomT) et les coordonnées géographiques d’un fichier NetCDF. 
+#Elle met les données en cache dans nc_cache pour éviter de relire 
+#plusieurs fois les mêmes fichiers
+
 get_nc_data <- function(fichier){
   
   if(!exists(fichier, envir = nc_cache)){

@@ -1,3 +1,6 @@
+#lit un fichier NetCDF contenant les données de salinité 
+#et extrait les coordonnées géographiques ainsi que les profondeurs associées.
+
 get_nc_data_salinity <- function(fichier){
   
   nc <- nc_open(fichier)

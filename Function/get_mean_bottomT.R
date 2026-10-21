@@ -1,3 +1,7 @@
+#extrait les températures journalières du fond marin à la station la plus proche des coordonnées
+#fournies, à partir de fichiers NetCDF. 
+#Elle calcule ensuite la température moyenne sur la période comprise 
+#entre le dépôt et la remontée de la ligne de pêche.
 
 get_mean_bottomT <- function(lon_sta, lat_sta,
                              date_depot, date_remontee,

@@ -1,3 +1,8 @@
+#extrait les salinités journalières du fond marin à la station la plus proche des coordonnées
+#fournies, à partir de fichiers NetCDF. 
+#Elle calcule ensuite la salinité moyenne sur la période comprise 
+#entre le dépôt et la remontée de la ligne de pêche.
+
 get_mean_salinity <- function(lon_sta, lat_sta,
                               depth_sta,
                               date_depot, date_remontee,

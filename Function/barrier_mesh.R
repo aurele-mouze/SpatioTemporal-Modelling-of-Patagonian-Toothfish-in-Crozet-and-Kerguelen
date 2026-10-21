@@ -1,4 +1,4 @@
-
+#Création d'un maillage spatial avec barrière géographique à partir des coordonnées des stations.
 mesh_barriere = function(data, nb_noeud){
 mesh <- sdmTMB::make_mesh(data, c("X", "Y"), n_knots = nb_noeud)  # Création du maillage
 # ---- Barrière ----
