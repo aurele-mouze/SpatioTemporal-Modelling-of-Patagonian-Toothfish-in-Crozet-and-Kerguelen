@@ -8,6 +8,11 @@ vars_std <- c(
   "bottomT"
 )
 
+# Pour chaque variable standardisé on :
+#   Fait une prédiction via visreg
+#   Remet la variable sur l échelle réelle
+#   crée le graphique de l effet
+
 stats_std <- dat_pos %>%
   summarise(
     across(
@@ -655,8 +660,9 @@ p_cachalot_orque <- ggplot(
   ) +
   theme_bw()
 
-p_cachalot_orque
 
+
+#Création des groupement de figure en 2 catégories (variable de capturabilité ou de densité)
 
 figure_effets_catch <- (
     p_cachalot +
@@ -675,7 +681,7 @@ figure_effets_catch <- (
     axis.title.x = element_text(size = 9)
   )
 
-figure_effets_catch
+
 
 figure_effets_dens <- (
   p_bathy +
@@ -686,6 +692,7 @@ figure_effets_dens <- (
 
 figure_effets_dens
 
+#Sauvegarde
 
 ggsave(
   here("data", output_plot, "figure_effets_catch_Cro.jpg"),

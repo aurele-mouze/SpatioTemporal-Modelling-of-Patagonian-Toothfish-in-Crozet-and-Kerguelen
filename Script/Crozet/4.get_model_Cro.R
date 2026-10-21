@@ -275,7 +275,7 @@ cat("→ mesh.png sauvegardé\n\n")
 m_1 <- sdmTMB(
   ScanWeightKg ~ s(TAAFseason_sc) + s(Month, bs = "cc") + Vessel + s(prof_bathy_sc) + s(slope_sc) + s(HookLength_sc)  +
     cachalot_obs + orque_obs + s(NB_MEAN_CACHALOT_sc, NB_MEAN_ORQUE_sc),
-  offset = log(0.56*0.002*(dat_pos_std$nb_ham -1) + 0.246),
+  offset = log(0.56*0.002*(dat_pos_std$nb_ham - 1) + 0.246),
   data = dat_pos_std,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -295,7 +295,7 @@ cat("→ m_1.rds sauvegardé\n\n")
 
 m_2 <- sdmTMB(
   ScanWeightKg ~ s(TAAFseason) + s(Month, bs = "cc") + Vessel + s(prof_bathy_sc) + s(slope_sc) + s(HookLength_sc),
-  offset = log(0.56*0.002*dat_pos_std$nb_ham + 0.246),
+  offset = log(0.56*0.002*(dat_pos_std$nb_ham - 1) + 0.246),
   data = dat_pos_std,
   mesh = bspde_pos,
   family = Gamma(link = "log"),
@@ -314,8 +314,9 @@ cat("→ m_2.rds sauvegardé\n\n")
 
 
 
+# Prédiction sur la donnée
 
-# 2. Jeux de données pour les scénarios
+# 1. Jeux de données pour les scénarios
 # -------------------------------------
 
 # Situation réelle (avec déprédation observée)
@@ -340,14 +341,14 @@ dat_sans_cachalot <- dat_pos_std %>%
     NB_MEAN_CACHALOT = 0
   )
 
-# 3. Offsets
+# 2. Offsets
 # ----------
 offset_reel <- log(0.46*0.002*dat_pos_std$nb_ham + 0.246)
 offset_sans_dep <- log(0.46*0.002*dat_pos_std$nb_ham + 0.246)
 offset_sans_orque <- log(0.46*0.002*dat_pos_std$nb_ham + 0.246)
 offset_sans_cachalot <- log(0.46*0.002*dat_pos_std$nb_ham + 0.246)
 
-# 4. Prédictions du modèle
+# 3. Prédictions du modèle
 # ------------------------
 
 pred_reel <- predict(
@@ -378,7 +379,7 @@ pred_sans_cachalot <- predict(
   type = "response"
 )
 
-# 5. Dataframe final
+# 4. Dataframe final
 # ------------------
 
 df_station_predictions <- dat_pos_std %>%
@@ -430,49 +431,9 @@ saveRDS(
 cat("→ df_station_predictions.rds sauvegardé\n\n")
 
 
-get_mean_bottomT_season <- function(lon_sta, lat_sta,
-                                    season,
-                                    dossier_nc){
-  
-  jours <- seq(
-    as.Date(paste0(season, "-09-01")),
-    as.Date(paste0(season + 1, "-09-30")),
-    by = "day"
-  )
-  
-  valeurs <- numeric(length(jours))
-  
-  for(k in seq_along(jours)){
-    
-    d <- jours[k]
-    
-    fichier <- file.path(
-      dossier_nc,
-      sprintf(
-        "bottomT_daily_%s_%s.nc",
-        format(d, "%Y"),
-        format(d, "%m")
-      )
-    )
-    
-    if(!file.exists(fichier)){
-      valeurs[k] <- NA
-      next
-    }
-    
-    dat <- get_nc_data(fichier)
-    
-    i <- which.min(abs(dat$lon - lon_sta))
-    j <- which.min(abs(dat$lat - lat_sta))
-    
-    jour_mois <- as.integer(format(d, "%d"))
-    
-    valeurs[k] <- dat$temp[i, j, jour_mois]
-  }
-  
-  mean(valeurs, na.rm = TRUE)
-}
-#6. Fabrication d'une grille d'extrapolation ------------------------------------------------------
+#Préparation de la grille
+
+#1. Fabrication d'une grille d'extrapolation ------------------------------------------------------
 # Import et préparation de la grille d’extrapolation spatiale
 Extrapol_grid <- readRDS(here("data/outputs/df/grid_extrapolCRO.rds"))
 
@@ -500,7 +461,7 @@ grid <- Extrapol_grid %>%
   
 
 
-#7. Prédictions -----------------------------------
+#2 . Prédictions -----------------------------------
 
 # Vérifications rapides
 stopifnot("TAAFseason" %in% names(dat_pos))
@@ -561,15 +522,9 @@ required_cols <- c("prof_bathy", "TAAFseason", "X", "Y")
 missing_cols <- setdiff(required_cols, names(grid_all_years))
 if (length(missing_cols) > 0) stop("Colonnes manquantes dans newdata : ", paste(missing_cols, collapse = ", "))
 
-# pred_std <- predict(
-#   m_1,
-#   newdata = grid_all_years,
-#   offset = log(
-#     0.56 * 0.002 * (grid_all_years$nb_ham - 1) + 0.246
-#   ),
-#   type = "response",
-#   return_tmb_object = FALSE
-# )
+
+#Prédiction sur m_1
+
 pred_std <- predict(
   m_1,
   newdata = grid_all_years,
@@ -577,10 +532,10 @@ pred_std <- predict(
   return_tmb_object = TRUE
 )
 
-index_std <- get_index(pred_std, bias_correct = FALSE)
+index_std <- get_index(pred_std, bias_correct = TRUE)
 
 
-
+#Prédiction m_2
 pred <- predict(
   m_2,
   newdata = grid_all_years,
@@ -588,11 +543,13 @@ pred <- predict(
   return_tmb_object = TRUE
 )
 
-index <- get_index(pred, bias_correct = FALSE)
+index <- get_index(pred, bias_correct = TRUE)
 
+
+#Sauvegarde
 saveRDS(
   pred_std,
-  file = file.path("data", output_plot, "pred_depred_cro2.rds")
+  file = file.path("data", output_plot, "pred_depred_cro.rds")
 )
 
 saveRDS(

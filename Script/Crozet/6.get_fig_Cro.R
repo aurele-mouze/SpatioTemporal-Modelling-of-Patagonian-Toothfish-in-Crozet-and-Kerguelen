@@ -1,3 +1,5 @@
+#Figure de l'évolution de l'indice d'abondance relatif
+
 index_mean <- index_depred_cro %>%
   filter(TAAFseason >= 2008, TAAFseason <= 2025) %>%
   mutate(
@@ -25,8 +27,6 @@ p_index <- ggplot(index_mean, aes(x = TAAFseason, y = est_rel)) +
   theme_classic()
 
 
-p_index
-
 ggsave(
   here("data", output_plot, "indice_abondance_standardise_Crozet.png"),
   p_index,
@@ -35,6 +35,8 @@ ggsave(
   units = "in",
   dpi = 300
 )
+
+#Grille spatiale de l'indice d'abondance
 
 grid_mean_cro <- pred_depred_cro %>%
   filter(TAAFseason >= 2008, TAAFseason <= 2025) %>%
@@ -126,6 +128,8 @@ ggsave(
   dpi = 400
 )
 
+# Hotspots spatiaux
+# 1. Hotspots initiaux
 
 grid_hotspot_cro <- pred_depred_cro %>%
   filter(TAAFseason >= 2008, TAAFseason <= 2025) %>%
@@ -146,10 +150,110 @@ grid_hotspot_cro <- grid_hotspot_cro %>%
   mutate(
     hotspot = est_mean >= Q90
   )
-names(grid_hotspot_cro)
-table(grid_hotspot_cro$hotspot)
+# 2. Filtre pour garder uniquement les cellules hotspot
 
-grid_hotspot_cro_ll <- grid_hotspot_cro %>%
+
+hotspots <- grid_hotspot_cro %>%
+  filter(hotspot)
+
+
+
+# 3. Recherche des cellules voisines
+
+
+# Distance entre deux centres de cellules
+dx <- median(diff(sort(unique(hotspots$X))))
+dy <- median(diff(sort(unique(hotspots$Y))))
+
+# Tolérance pour éviter les problèmes numériques
+tol <- 1e-6
+
+# On cherche les voisins dans les 8 directions
+neighbors <- expand.grid(
+  dx = c(-dx, 0, dx),
+  dy = c(-dy, 0, dy)
+) %>%
+  filter(!(dx == 0 & dy == 0))
+
+
+# Création des liens entre cellules voisines
+edges <- lapply(seq_len(nrow(neighbors)), function(i) {
+  
+  hotspots %>%
+    select(cell_id, X, Y) %>%
+    inner_join(
+      hotspots %>%
+        select(cell_id, X, Y) %>%
+        rename(
+          cell_id_2 = cell_id,
+          X2 = X,
+          Y2 = Y
+        ),
+      by = character()
+    ) %>%
+    filter(
+      abs((X2 - X) - neighbors$dx[i]) < tol,
+      abs((Y2 - Y) - neighbors$dy[i]) < tol
+    ) %>%
+    transmute(
+      from = cell_id,
+      to = cell_id_2
+    )
+}) %>%
+  bind_rows() %>%
+  distinct()
+
+
+
+# 4. Identification des groupes de cellules connectées
+
+
+g <- graph_from_data_frame(
+  edges,
+  directed = FALSE,
+  vertices = hotspots$cell_id
+)
+
+components_g <- components(g)
+
+
+hotspots <- hotspots %>%
+  mutate(
+    hotspot_id = components_g$membership[
+      match(cell_id, names(components_g$membership))
+    ]
+  )
+
+
+# 5. Taille de chaque hotspot
+
+
+hotspot_sizes <- hotspots %>%
+  count(hotspot_id, name = "n_cells")
+
+
+# 6. Conservation des hotspots > 30 cellules 
+
+
+hotspots_final <- hotspots %>%
+  left_join(
+    hotspot_sizes,
+    by = "hotspot_id"
+  ) %>%
+  mutate(
+    hotspot_final = n_cells > 30 #peut modifier le nombre de cellules
+  )
+
+
+# Vérification
+table(hotspots_final$hotspot_final)
+
+hotspots_final %>%
+  filter(hotspot_final) %>%
+  count(hotspot_id, n_cells)
+
+grid_hotspot_cro_ll <- hotspots_final %>%
+  filter(hotspot_final) %>%
   mutate(
     X_utm = X * 1000,
     Y_utm = Y * 1000
@@ -165,6 +269,8 @@ grid_hotspot_cro_ll <- grid_hotspot_cro %>%
     lat = st_coordinates(.)[, 2]
   ) %>%
   st_drop_geometry()
+
+#Création de la figure
 
 Hotspot_Cro <- CRO_map +
   geom_tile(
@@ -203,153 +309,10 @@ ggsave(
 
 
 
-library(dplyr)
-library(igraph)
 
-# Uniquement les cellules Q90
-hotspots <- grid_hotspot_cro %>%
-  filter(hotspot) %>%
-  select(cell_id, X, Y)
+#Grille spatio-temporelle de l'indice d'abondance
 
-dx <- median(diff(sort(unique(grid_hotspot_cro$X))))
-dy <- median(diff(sort(unique(grid_hotspot_cro$Y))))
-
-dx
-dy
-
-
-hotspots_neighbors <- hotspots %>%
-  mutate(
-    X_left  = X - dx,
-    X_right = X + dx,
-    Y_down  = Y - dy,
-    Y_up    = Y + dy
-  )
-
-n_dist <- 3
-
-neighbor_offsets <- expand.grid(
-  ix = -n_dist:n_dist,
-  iy = -n_dist:n_dist
-) %>%
-  filter(!(ix == 0 & iy == 0)) %>%
-  mutate(
-    dx_offset = ix * dx,
-    dy_offset = iy * dy
-  )
-pairs <- hotspots %>%
-  tidyr::crossing(
-    neighbor_offsets
-  ) %>%
-  mutate(
-    X_neighbor = X + dx_offset,
-    Y_neighbor = Y + dy_offset
-  ) %>%
-  select(
-    cell_id_1 = cell_id,
-    X_neighbor,
-    Y_neighbor
-  ) %>%
-  left_join(
-    hotspots %>%
-      select(
-        cell_id_2 = cell_id,
-        X,
-        Y
-      ),
-    by = c(
-      "X_neighbor" = "X",
-      "Y_neighbor" = "Y"
-    )
-  ) %>%
-  filter(!is.na(cell_id_2))
-g <- igraph::graph_from_data_frame(
-  pairs %>%
-    select(cell_id_1, cell_id_2),
-  directed = FALSE,
-  vertices = hotspots %>% select(cell_id)
-)
-components <- igraph::components(g)
-
-hotspots <- hotspots %>%
-  mutate(
-    hotspot_id = components$membership[
-      match(cell_id, names(components$membership))
-    ]
-  )
-hotspot_sizes <- hotspots %>%
-  count(
-    hotspot_id,
-    name = "n_cells"
-  ) %>%
-  arrange(desc(n_cells))
-
-hotspots_final <- hotspots %>%
-  left_join(
-    hotspot_sizes,
-    by = "hotspot_id"
-  ) %>%
-  filter(n_cells >= 10)
-hotspots_final %>%
-  distinct(hotspot_id, n_cells) %>%
-  arrange(desc(n_cells))
-grid_hotspot_cro <- grid_hotspot_cro %>%
-  left_join(
-    hotspots_final %>%
-      select(
-        cell_id,
-        hotspot_id,
-        n_cells
-      ),
-    by = "cell_id"
-  ) %>%
-  mutate(
-    hotspot_final = !is.na(hotspot_id)
-  )
-grid_hotspot_cro_ll <- grid_hotspot_cro %>%
-  mutate(
-    X_utm = X * 1000,
-    Y_utm = Y * 1000
-  ) %>%
-  st_as_sf(
-    coords = c("X_utm", "Y_utm"),
-    crs = 32743,
-    remove = FALSE
-  ) %>%
-  st_transform(4326) %>%
-  mutate(
-    lon = st_coordinates(.)[, 1],
-    lat = st_coordinates(.)[, 2]
-  ) %>%
-  st_drop_geometry()
-CRO_map +
-  geom_tile(
-    data = filter(grid_hotspot_cro_ll, hotspot_final),
-    aes(
-      x = lon,
-      y = lat
-    ),
-    width = 0.0265,
-    height = 0.0265,
-    fill = "red",
-    alpha = 0.8
-  ) +
-  annotation_north_arrow(
-    location = "tr",
-    which_north = "true",
-    style = north_arrow_fancy_orienteering
-  ) +
-  annotation_scale(
-    location = "bl",
-    width_hint = 0.25,
-    text_cex = 0.8
-  ) +
-  theme(
-    legend.position = "none"
-  )
-
-
-
+#Peut modifier les périodes
 
 grid_period_cro <- pred_depred_cro %>%
   filter(TAAFseason >= 2008, TAAFseason <= 2025) %>%
@@ -453,6 +416,10 @@ ggsave(
   dpi = 500
 )
 
+# Hotspots par période
+
+
+# 1. Moyenne des prédictions par période et cellule
 
 grid_hotspot_period_cro <- pred_depred_cro %>%
   filter(TAAFseason >= 2008, TAAFseason <= 2025) %>%
@@ -480,7 +447,171 @@ grid_hotspot_period_cro <- pred_depred_cro %>%
   ) %>%
   ungroup()
 
-grid_hotspot_period_cro_ll <- grid_hotspot_period_cro %>%
+# 2. Q90 calculé séparément pour chaque période
+
+
+Q90_period_ker <- grid_hotspot_period_cro %>%
+  group_by(periode) %>%
+  summarise(
+    Q90 = quantile(
+      est_mean,
+      probs = 0.90,
+      na.rm = TRUE
+    ),
+    .groups = "drop"
+  )
+
+
+grid_hotspot_period_ker <- grid_hotspot_period_ker %>%
+  left_join(
+    Q90_period_ker,
+    by = "periode"
+  ) %>%
+  mutate(
+    hotspot = est_mean >= Q90
+  )
+
+
+# 3. Fonction pour identifier les groupes connectés
+
+
+find_groups <- function(nodes, edges) {
+  
+  nodes <- as.character(nodes)
+  edges$cell_id <- as.character(edges$cell_id)
+  edges$cell_id_2 <- as.character(edges$cell_id_2)
+  
+  groups <- setNames(
+    integer(length(nodes)),
+    nodes
+  )
+  
+  group_id <- 0
+  
+  for (node in nodes) {
+    
+    # Si déjà attribué à un groupe
+    if (groups[node] != 0) {
+      next
+    }
+    
+    group_id <- group_id + 1
+    
+    current <- node
+    groups[node] <- group_id
+    
+    while (length(current) > 0) {
+      
+      neighbours <- unique(c(
+        edges$cell_id_2[
+          edges$cell_id %in% current
+        ],
+        edges$cell_id[
+          edges$cell_id_2 %in% current
+        ]
+      ))
+      
+      # On ne garde que les cellules pas encore attribuées
+      neighbours <- neighbours[
+        neighbours %in% nodes &
+          groups[neighbours] == 0
+      ]
+      
+      if (length(neighbours) == 0) {
+        current <- character(0)
+      } else {
+        groups[neighbours] <- group_id
+        current <- neighbours
+      }
+    }
+  }
+  
+  groups
+}
+
+# 4. Identification des groupes par période
+
+
+hotspots_period <- grid_hotspot_period_ker %>%
+  filter(hotspot)
+
+
+hotspots_period_list <- lapply(
+  split(hotspots_period, hotspots_period$periode),
+  function(dat) {
+    
+    # Distance entre les cellules
+    dx <- median(diff(sort(unique(dat$X))))
+    dy <- median(diff(sort(unique(dat$Y))))
+    
+    # Index de grille
+    dat <- dat %>%
+      mutate(
+        ix = round(X / dx),
+        iy = round(Y / dy)
+      )
+    
+    # Recherche des voisins
+    edges <- dat %>%
+      select(cell_id, ix, iy) %>%
+      cross_join(
+        dat %>%
+          select(
+            cell_id_2 = cell_id,
+            ix2 = ix,
+            iy2 = iy
+          )
+      ) %>%
+      filter(
+        abs(ix2 - ix) <= 1,
+        abs(iy2 - iy) <= 1,
+        !(ix2 == ix & iy2 == iy)
+      ) %>%
+      select(
+        cell_id,
+        cell_id_2
+      )
+    
+    # Groupes connectés
+    group_ids <- find_groups(
+      nodes = dat$cell_id,
+      edges = edges
+    )
+    
+    dat %>%
+      mutate(
+        hotspot_id = group_ids[cell_id]
+      )
+  }
+) %>%
+  bind_rows()
+
+
+# 5. Taille des hotspots
+
+
+hotspot_sizes_period <- hotspots_period_list %>%
+  count(
+    periode,
+    hotspot_id,
+    name = "n_cells"
+  )
+
+
+# 6. Hotspots finaux > 10 cellules
+
+hotspots_period_final <- hotspots_period_list %>%
+  left_join(
+    hotspot_sizes_period,
+    by = c("periode", "hotspot_id")
+  ) %>%
+  mutate(
+    hotspot_final = n_cells > 30
+  )
+
+
+grid_hotspot_period_cro_ll <- hotspots_period_final %>%
+  filter(hotspot_final) %>%
   mutate(
     X_utm = X * 1000,
     Y_utm = Y * 1000
