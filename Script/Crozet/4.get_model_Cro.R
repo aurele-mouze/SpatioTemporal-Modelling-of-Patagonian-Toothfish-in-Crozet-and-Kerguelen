@@ -283,7 +283,7 @@ m_1 <- sdmTMB(
   time= "TAAFseason",
   spatiotemporal = "iid"
 )
-e <- visreg(m_1, xvar = "HookLength_sc")
+
 
 saveRDS(
   m_1,
