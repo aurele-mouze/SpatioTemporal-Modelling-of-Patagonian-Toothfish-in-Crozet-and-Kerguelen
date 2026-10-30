@@ -1,11 +1,18 @@
-# stage_AM
+# SpatioTemporal-Modelling-of-Patagonian-Toothfish-in-Crozet-and-Kerguelen
 
+This project focuses on the spatio-temporal modelling of Patagonian toothfish (Dissostichus eleginoides) populations in the Kerguelen and Crozet EEZs (French Southern and Antarctic Lands).
 
-stage Aurèle Mouze
+The work was conducted under the supervision of Félix Massiot-Granier, Clara Péron and Fanny Ouzoulias, from the UMR BOREA laboratory at the French National Museum of Natural History (Muséum National d'Histoire Naturelle, MNHN), Paris.
 
-# Data Formatting, Spatial Modelling and Analysis of POKER Data
+Using commercial fishing data, the objective is to investigate and model the spatial and temporal distribution of Patagonian toothfish in both study areas. The analyses are carried out using sdmTMB, a statistical framework for spatial and spatio-temporal modelling based on stochastic partial differential equations (SPDEs).
+
+Several environmental and operational covariates are incorporated into the models to investigate the factors influencing toothfish distribution and to account for spatial and temporal variability. The overall aim is to improve our understanding of population distribution patterns and their dynamics in these sub-Antarctic area.
+
+The model structure and the selection of explanatory variables are based on previous work carried out by Mathilde Gudin (https://github.com/ldbk/EBESCO/tree/main/SDM). These preliminary analyses provided the basis for the model specifications used in this project, which were subsequently integrated into the spatial modelling workflow.
+
+# Data Formatting, Spatial Modelling and Analysis of Fishery Data
  
-This repository contains all scripts required to **format**, **explore**, and **analyse** data from POKER surveys in the Kerguelen and Crozet EEZs. The workflow includes data preparation, spatial grid creation, mesh and model testing, model fitting, and prediction generation using `sdmTMB`. It also produces **spatial distribution outputs**, **model effect plots**, and figures for *Dissostichus eleginoides*.
+This repository contains all scripts required to **format**, **explore**, and **analyse** data from PECHEKER in the Kerguelen and Crozet EEZs. The workflow includes data preparation, spatial grid creation, mesh and model testing, model fitting, and prediction generation using `sdmTMB`. It also produces **spatial distribution outputs**, **model effect plots**, and figures for *Dissostichus eleginoides*.
  
 ---
  
@@ -37,7 +44,7 @@ The repository is organised into the following directories:
   Creates the spatial grid.
  
 - `3.Test_mesh_and_model/`  
-  Tests different mesh configurations and model specifications.
+  Tests different mesh configurations and model specifications. The initial model structure and explanatory variable selection are based on previous work by Mathilde Gudin (https://github.com/ldbk/EBESCO/tree/main/SDM).
  
 - `4.Get_model/`  
   Fits the selected models and generates predictions.
